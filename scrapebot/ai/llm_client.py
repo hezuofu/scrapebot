@@ -88,6 +88,11 @@ class LLMClient:
             from openai import AsyncOpenAI
             self._client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
 
+    async def close(self) -> None:
+        if self._client:
+            await self._client.close()
+            self._client = None
+
     async def extract(self, instruction: str, content: str) -> list[dict[str, Any]]:
         self._ensure_client()
         tmpl = self._templates.get("extract_json", DEFAULT_TEMPLATES["extract_json"])

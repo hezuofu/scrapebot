@@ -1,3 +1,63 @@
+调度器为中心
+
+- Coordinator 负责任务接收、依赖管理、暂停/恢复/取消、超时终止
+
+- PriorityQueue 优先级排序 + 老化防饿死
+
+- DelayedQueue 定时调度 + Cron 周期任务
+
+- RedisQueue 分布式原子消费 + 崩溃恢复
+
+- Dispatcher 亲和性调度 + 批量分发
+
+- LoadBalancer 健康探测 + 负载评分 + K8s HPA
+  Worker 执行
+
+- Executor 编排 下载→解析→管道 全流程
+
+- HTTP/Playwright/Automator 三种下载模式
+
+- CSS/XPath/Regex/LLM/Composite 五种解析器
+
+- 超时控制 + Semaphore 并发隔离
+  中间件增强
+
+- 可中断链：RateLimit → Enrich → Execute → PostProcess
+
+- 代理轮换 + 粘性会话 + 自动剔除
+
+- UA 洗牌轮换 + 设备匹配 + 指纹同步
+
+- 指数退避重试 + 三态熔断器 + 半开探测
+
+- 验证码/封禁检测 + 自动换代理降速
+  管道处理
+
+- Bloom/Redis/LRU 三级去重
+
+- 字段清洗 + 脱敏 + 类型校验 + 范围校验
+
+- PostgreSQL/MongoDB/LocalFile/S3/Kafka 六种输出
+  AI 辅助
+
+- 提示词模板 + 指令缓存
+
+- 自然语言→选择器 + 选择器验证
+
+- 内容摘要/分类 + 结构异常检测
+  可观测性兜底
+
+- 39 种生命周期事件 + pub/sub 总线
+
+- Prometheus 指标 + Jaeger 追踪 + JSON 日志 + 告警通知
+
+- Webhook 异步回调 + 指数退避重试
+  插件化替换
+
+- Registry 6 类别 30+ 组件，reg.register() 即可替换任意组件
+
+- 58 测试持续通过
+
 scrapebot/
 │
 ├── scheduler/                    # 调度层（核心）

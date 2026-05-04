@@ -5,8 +5,10 @@ from typing import Any
 
 import xxhash
 
+from scrapebot.pipeline.base import PipelineStep
 
-class BloomFilter:
+
+class BloomFilter(PipelineStep):
     def __init__(self, capacity: int = 100_000, error_rate: float = 0.001) -> None:
         self._size = int(-capacity * math.log(error_rate) / (math.log(2) ** 2))
         self._hash_count = int(self._size / capacity * math.log(2))
@@ -25,6 +27,11 @@ class BloomFilter:
             if not (self._bits[idx // 8] & (1 << (idx % 8))):
                 return False
         return True
+
+    async def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
+        if isinstance(data, list):
+            return [item for item in data if self.add_if_new(item)]
+        return data if self.add_if_new(data) else None
 
     def add_if_new(self, item: Any) -> bool:
         if self.contains(item):

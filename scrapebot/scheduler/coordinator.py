@@ -18,10 +18,6 @@ from scrapebot.types import Task, TaskResult, TaskStatus
 
 logger = logging.getLogger(__name__)
 
-_MAX_RESULTS = 10_000
-_RESULT_TTL = 3600
-
-
 class Coordinator:
     def __init__(
         self,
@@ -207,9 +203,11 @@ class Coordinator:
 
     def _add_result(self, task_id: str, result: TaskResult) -> None:
         self._results[task_id] = (result, datetime.now().timestamp())
-        while len(self._results) > _MAX_RESULTS:
+        max_entries = getattr(self.settings.task, "task_queue_max_size", 10_000)
+        while len(self._results) > max_entries:
             self._results.popitem(last=False)
         now = datetime.now().timestamp()
-        expired = [k for k, (_, ts) in self._results.items() if now - ts > _RESULT_TTL]
+        ttl = getattr(self.settings.task, "result_ttl_seconds", 3600)
+        expired = [k for k, (_, ts) in self._results.items() if now - ts > ttl]
         for k in expired:
             del self._results[k]

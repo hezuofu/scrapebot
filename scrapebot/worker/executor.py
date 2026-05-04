@@ -30,32 +30,32 @@ class Executor:
         downloader_selector: DownloaderSelector | None = None,
         parser: BaseParser | None = None,
         pipeline: Pipeline | None = None,
-        max_concurrency: int = 10,
+        max_concurrency: int | None = None,
+        middleware_chain: Any = None,
     ) -> None:
         self.settings = settings
         self._bus = event_bus
         self._selector = downloader_selector or DownloaderSelector(site_rules=settings.site_rules)
         self._parser = parser
         self._pipeline = pipeline or Pipeline()
-        self._semaphore = asyncio.Semaphore(max_concurrency)
+        self._semaphore = asyncio.Semaphore(max_concurrency or settings.scheduler.max_concurrent_tasks)
+        self._middleware = middleware_chain
 
     async def execute(self, task: Task) -> TaskResult:
+        handler = self._execute_inner
+        if self._middleware:
+            handler = self._middleware.wrap(handler)
+
         async with self._semaphore:
             try:
-                result = await asyncio.wait_for(
-                    self._execute_inner(task),
-                    timeout=task.timeout,
-                )
+                result = await asyncio.wait_for(handler(task), timeout=task.timeout)
             except asyncio.TimeoutError:
                 logger.error("Task %s timed out after %.1fs", task.id, task.timeout)
                 await self._emit(EventType.TASK_FAILED, task, "Task timed out", "error")
                 return TaskResult(
-                    task_id=task.id,
-                    status=TaskStatus.FAILED,
+                    task_id=task.id, status=TaskStatus.FAILED,
                     error=f"Timeout after {task.timeout}s",
-                    started_at=datetime.now(),
-                    finished_at=datetime.now(),
-                )
+                    started_at=datetime.now(), finished_at=datetime.now())
             return result
 
     async def _execute_inner(self, task: Task) -> TaskResult:
@@ -138,6 +138,8 @@ class Executor:
 
         data = pipeline_result if isinstance(pipeline_result, list) else parse_result.items
         await self._emit(EventType.TASK_COMPLETED, task)
+        # Report result for downloader fallback learning
+        await self._selector.report_result(task, download_result)
         return TaskResult(
             task_id=task.id,
             status=TaskStatus.COMPLETED,

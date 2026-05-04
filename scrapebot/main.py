@@ -26,9 +26,11 @@ import uvicorn
 from scrapebot.config.settings import load_settings, Settings
 from scrapebot.config.store import ConfigStore
 from scrapebot.events.bus import EventBus
+from scrapebot.events.types import EventType
 from scrapebot.events.subscribers.logger import LoggingSubscriber
 from scrapebot.events.subscribers.metrics import MetricsSubscriber
 from scrapebot.events.subscribers.webhook import WebhookSubscriber
+from scrapebot.middleware.chain import MiddlewareChain
 from scrapebot.monitoring.logging.structured import StructuredLogger
 from scrapebot.monitoring.metrics.stats import StatsTracker
 from scrapebot.pipeline.base import Pipeline
@@ -42,6 +44,39 @@ from scrapebot.worker.downloader.selector import DownloaderSelector
 from scrapebot.worker.executor import Executor
 
 logger = logging.getLogger("scrapebot")
+
+
+def _build_middleware(settings: Settings, registry: Registry) -> MiddlewareChain | None:
+    """Build middleware chain from registry with action trigger wired to detectors."""
+    from scrapebot.middleware.anti_detect.action_trigger import ActionTrigger
+
+    rate_limiter = registry.create("middleware", "rate_limiter",
+        requests_per_second=settings.rate_limit.requests_per_second,
+        burst_size=settings.rate_limit.burst_size)
+    ua = registry.create("middleware", "ua_rotator")
+    fp = registry.create("middleware", "fingerprint")
+
+    trigger = ActionTrigger(settings)
+    captcha = registry.create("middleware", "captcha_detector", trigger=trigger)
+    ban = registry.create("middleware", "ban_detector", trigger=trigger)
+
+    proxy_rotator = registry.create("middleware", "proxy_rotator",
+        proxies=[], rotation="round_robin",
+        sticky=settings.proxy_config.session_sticky)
+
+    retry = registry.create("middleware", "retry_policy",
+        max_attempts=settings.retry.max_attempts,
+        backoff_base=settings.retry.backoff_base,
+        backoff_max=settings.retry.backoff_max)
+
+    return MiddlewareChain(
+        rate_limiter=rate_limiter,
+        enrichers=[ua, fp],
+        retry_policy=retry,
+        post_processors=[captcha, ban, trigger],
+        proxy_enabled=settings.proxy_config.enabled,
+        proxy_rotator=proxy_rotator,
+    )
 
 
 def create_app(
@@ -88,12 +123,21 @@ def create_app(
     for step_name in settings.worker.pipeline_steps:
         pipeline.add(registry.create("pipeline_step", step_name))
 
+    # ── storage sink (final pipeline step) ────────────────────
+    storage_type = getattr(settings.storage_config, "default_output", "file")
+    storage_adapter = registry.create("storage", storage_type,
+        output_dir="output", format="json")
+    from scrapebot.pipeline.storage_sink import StorageSink
+    pipeline.add(StorageSink(storage=storage_adapter, collection="scrape_results", event_bus=bus))
+
     executor = Executor(
         settings,
         event_bus=bus,
         downloader_selector=downloader_selector,
         parser=parser,
         pipeline=pipeline,
+        max_concurrency=settings.scheduler.max_concurrent_tasks,
+        middleware_chain=_build_middleware(settings, registry),
     )
 
     dispatcher = Dispatcher(settings, executor=executor)
@@ -108,6 +152,18 @@ def create_app(
         event_bus=bus,
         task_store=task_store,
     )
+
+    # ── webhook callback on task completion ───────────────────
+    webhook_url = getattr(settings.storage_config, "default_output", None)
+    if settings.monitoring.alert_webhook:
+        from scrapebot.api.webhook.callback import WebhookCallback
+        _wh = WebhookCallback(settings.monitoring.alert_webhook)
+        async def _on_task_done(event):
+            result = coordinator.get_result(event.task_id)
+            if result:
+                await _wh.send(result)
+        bus.subscribe(EventType.TASK_COMPLETED, _on_task_done)
+        bus.subscribe(EventType.TASK_FAILED, _on_task_done)
 
     # Wire LLM client into parsers that need it
     if settings.llm.api_key:
@@ -173,6 +229,11 @@ def run_api(settings: Settings) -> None:
         from fastapi.responses import FileResponse
         return FileResponse(static_dir / "dashboard.html")
 
+    @app.get("/metrics")
+    async def metrics():
+        from prometheus_client import generate_latest
+        return await asyncio.to_thread(generate_latest)
+
     @app.get("/")
     async def root():
         return {
@@ -181,6 +242,7 @@ def run_api(settings: Settings) -> None:
             "docs": "/docs",
             "dashboard": "/dashboard",
             "api": "/api/v1",
+            "metrics": "/metrics",
             "registry": {c: registry.list(c) for c in registry.categories()},
         }
 

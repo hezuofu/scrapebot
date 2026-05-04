@@ -6,7 +6,10 @@ from typing import Any
 import redis.asyncio as aioredis
 
 
-class RedisDedup:
+from scrapebot.pipeline.base import PipelineStep
+
+
+class RedisDedup(PipelineStep):
     def __init__(
         self,
         redis_url: str = "redis://localhost:6379/0",
@@ -21,6 +24,15 @@ class RedisDedup:
     async def _ensure_connected(self) -> None:
         if self._redis is None:
             self._redis = aioredis.from_url(self._redis_url)
+
+    async def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
+        if isinstance(data, list):
+            results = []
+            for item in data:
+                if not await self.is_duplicate(item):
+                    results.append(item)
+            return results
+        return None if await self.is_duplicate(data) else data
 
     async def is_duplicate(self, item: Any) -> bool:
         await self._ensure_connected()

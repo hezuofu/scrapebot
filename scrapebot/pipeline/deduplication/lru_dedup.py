@@ -5,10 +5,18 @@ from collections import OrderedDict
 from typing import Any
 
 
-class LRUDedup:
+from scrapebot.pipeline.base import PipelineStep
+
+
+class LRUDedup(PipelineStep):
     def __init__(self, max_size: int = 10_000) -> None:
         self._cache: OrderedDict[str, None] = OrderedDict()
         self._max_size = max_size
+
+    async def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
+        if isinstance(data, list):
+            return [item for item in data if not self.is_duplicate(item)]
+        return None if self.is_duplicate(data) else data
 
     def is_duplicate(self, item: Any) -> bool:
         key = self._digest(item)
