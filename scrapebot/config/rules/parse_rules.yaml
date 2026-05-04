@@ -1,0 +1,59 @@
+# Parse/extraction rule definitions
+# Reusable parse configurations for common patterns
+
+article:
+  description: "Extract article metadata and content"
+  parser_type: css
+  selectors:
+    title: "h1, .article-title, [itemprop=headline]"
+    author: ".author, [itemprop=author], [rel=author]"
+    date: "time, .published, [itemprop=datePublished]"
+    content: ".article-body, .content, [itemprop=articleBody]"
+  attributes:
+    date: "datetime"
+  clean_html: true
+
+product_list:
+  description: "Extract product listings from e-commerce pages"
+  extract_list: true
+  list_selector: ".product-item, [data-product], .s-result-item"
+  selectors:
+    name: ".product-name, .title, h2"
+    price: ".price, .product-price, [data-price]"
+    image: "img"
+    link: "a"
+  attributes:
+    image: "src"
+    link: "href"
+
+search_results:
+  description: "Extract search engine results"
+  extract_list: true
+  list_selector: ".g, .result, [data-result]"
+  selectors:
+    title: "h3, .title"
+    url: "a"
+    snippet: ".snippet, .description, .st"
+  attributes:
+    url: "href"
+
+social_media:
+  description: "Extract social media posts"
+  extract_list: true
+  list_selector: "[data-post], article, .post"
+  selectors:
+    author: ".author, .username, [data-author]"
+    content: ".content, .post-text, .tweet-text"
+    timestamp: "time, .date, [data-time]"
+    likes: ".likes, .favorites, [data-count=like]"
+  attributes:
+    timestamp: "datetime"
+
+pagination:
+  description: "Auto-detect pagination elements"
+  selectors:
+    next_page: ".next a, .pagination .next, [rel=next], a[aria-label=Next]"
+    page_numbers: ".pagination a, .page-numbers, [data-page]"
+  attributes:
+    next_page: "href"
+    page_numbers: "href"

@@ -1,0 +1,27 @@
+# Site-level scraping rules
+# URL patterns mapped to downloader/parser strategies
+
+defaults:
+  downloader: http
+  parser: css
+  rate_limit: 1.0
+  max_retries: 3
+
+sites:
+  - pattern: "*.example.com"
+    downloader: playwright
+    parser: css
+    rate_limit: 2.0
+    headers:
+      Referer: "https://www.example.com/"
+
+  - pattern: "*.spa-site.io/*"
+    downloader: playwright
+    parser: xpath
+    wait_selector: "#app[data-loaded=true]"
+    wait_timeout: 10.0
+
+  - pattern: "*.ai-extract.io/*"
+    downloader: http
+    parser: llm
+    llm_instruction: "Extract the main article content, title, author, and publish date as structured JSON."

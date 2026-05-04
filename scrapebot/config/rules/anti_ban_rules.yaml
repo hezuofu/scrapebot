@@ -1,0 +1,50 @@
+# Anti-ban / anti-detection rules
+# Actions triggered when specific patterns are detected
+
+detectors:
+  captcha:
+    keywords:
+      - "captcha"
+      - "verify you are a human"
+      - "g-recaptcha"
+      - "h-captcha"
+      - "cf-challenge"
+    actions:
+      - switch_proxy
+      - cool_down: 120
+      - notify
+
+  rate_limit:
+    status_codes: [429, 503]
+    response_patterns:
+      - "too many requests"
+      - "rate limit exceeded"
+    actions:
+      - reduce_rate: 0.5
+      - cool_down: 60
+
+  ban:
+    status_codes: [403, 401]
+    response_patterns:
+      - "access denied"
+      - "ip blocked"
+      - "your request has been blocked"
+    actions:
+      - switch_proxy
+      - rotate_fingerprint
+      - notify
+      - cool_down: 300
+
+  cloudflare:
+    status_codes: [403]
+    selectors:
+      - "#cf-challenge-running"
+      - "title:contains('Just a moment')"
+    actions:
+      - switch_proxy
+      - notify
+
+default_action_cooldown: 60
+max_consecutive_failures: 5
+notification_channels:
+  - webhook

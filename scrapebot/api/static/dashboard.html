@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scrapebot Config Dashboard</title>
+<style>
+:root {
+  --bg: #0f172a; --surface: #1e293b; --border: #334155;
+  --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+  --danger: #ef4444; --success: #22c55e; --warning: #f59e0b;
+  --radius: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+header h1 { font-size: 1.2rem; font-weight: 600; }
+header .status { display: flex; gap: 12px; align-items: center; font-size: 0.85rem; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-dot.ok { background: var(--success); }
+.status-dot.dirty { background: var(--warning); }
+nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 2px; overflow-x: auto; }
+nav button { background: none; border: none; color: var(--muted); padding: 10px 16px; cursor: pointer; font-size: 0.85rem; border-bottom: 2px solid transparent; white-space: nowrap; transition: all .2s; }
+nav button:hover { color: var(--text); }
+nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+section { display: none; }
+section.active { display: block; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.card h3 { font-size: 1rem; margin-bottom: 16px; color: var(--accent); }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 0.9rem; font-family: monospace; }
+.form-group textarea { min-height: 200px; resize: vertical; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.btn { padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all .2s; }
+.btn-primary { background: var(--accent); color: #0f172a; }
+.btn-primary:hover { opacity: 0.9; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { opacity: 0.9; }
+.btn-sm { padding: 4px 10px; font-size: 0.75rem; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+.btn-group { display: flex; gap: 8px; margin-top: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
+tr:hover { background: rgba(56,189,248,.05); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 500; }
+.badge-info { background: rgba(56,189,248,.2); color: var(--accent); }
+.badge-success { background: rgba(34,197,94,.2); color: var(--success); }
+.badge-warning { background: rgba(245,158,11,.2); color: var(--warning); }
+.toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: var(--radius); font-size: 0.85rem; z-index: 1000; animation: slideIn .3s; }
+.toast.success { background: var(--success); color: #0f172a; }
+.toast.error { background: var(--danger); color: white; }
+@keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.empty { text-align: center; color: var(--muted); padding: 32px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#9881; Scrapebot Config Dashboard</h1>
+  <div class="status">
+    <span id="status-indicator"><span class="status-dot ok"></span> Saved</span>
+    <span id="dirty-count" style="display:none"></span>
+    <button class="btn btn-sm btn-outline" onclick="saveAll()">Save All</button>
+  </div>
+</header>
+
+<nav>
+  <button class="active" data-tab="tasks">Task Templates</button>
+  <button data-tab="proxy">Proxy</button>
+  <button data-tab="auth">Auth</button>
+  <button data-tab="storage">Storage</button>
+  <button data-tab="site-rules">Site Rules</button>
+  <button data-tab="anti-ban">Anti-Ban</button>
+  <button data-tab="parse-rules">Parse Rules</button>
+  <button data-tab="import-export">Import / Export</button>
+  <button data-tab="changelog">Change Log</button>
+</nav>
+
+<main>
+  <!-- Task Templates -->
+  <section id="tab-tasks" class="active">
+    <div class="card">
+      <h3>Task Templates</h3>
+      <div id="task-templates-list"></div>
+      <button class="btn btn-primary" onclick="showTaskForm()" style="margin-top:12px">+ Add Template</button>
+    </div>
+    <div id="task-form-card" class="card" style="display:none">
+      <h3 id="task-form-title">New Template</h3>
+      <div class="form-row">
+        <div class="form-group"><label>Name</label><input id="tf-name" placeholder="my_template"></div>
+        <div class="form-group"><label>Scrape Mode</label><select id="tf-mode"><option value="fetch">fetch</option><option value="render">render</option><option value="automate">automate</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Downloader</label><select id="tf-downloader"><option value="http">http</option><option value="playwright">playwright</option></select></div>
+        <div class="form-group"><label>Parser</label><select id="tf-parser"><option value="css">css</option><option value="xpath">xpath</option><option value="regex">regex</option><option value="llm">llm</option><option value="composite">composite</option><option value="none">none</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Timeout (s)</label><input id="tf-timeout" type="number" value="30"></div>
+        <div class="form-group"><label>Max Retries</label><input id="tf-retries" type="number" value="3"></div>
+        <div class="form-group"><label>Rate Limit</label><input id="tf-rate" type="number" value="1.0" step="0.1"></div>
+      </div>
+      <div class="form-group"><label>Description</label><input id="tf-desc" placeholder="What this template does"></div>
+      <div class="form-group"><label>Parser Instructions (JSON)</label><textarea id="tf-instructions" rows="4">{"selectors": {}}</textarea></div>
+      <div class="form-group"><label>Automate Steps (JSON array, for automate mode)</label><textarea id="tf-steps" rows="3">[]</textarea></div>
+      <input type="hidden" id="tf-editing">
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="saveTemplate()">Save</button>
+        <button class="btn btn-outline" onclick="hideTaskForm()">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Proxy -->
+  <section id="tab-proxy">
+    <div class="card">
+      <h3>Proxy Configuration</h3>
+      <div class="form-group"><label>Enabled</label><select id="px-enabled"><option value="false">Disabled</option><option value="true">Enabled</option></select></div>
+      <div id="proxy-pools"></div>
+      <button class="btn btn-primary" onclick="showProxyServerForm('default')" style="margin-top:12px">+ Add Server</button>
+      <div class="btn-group"><button class="btn btn-primary" onclick="saveProxyConfig()">Save Proxy Config</button></div>
+    </div>
+  </section>
+
+  <!-- Auth -->
+  <section id="tab-auth">
+    <div class="card">
+      <h3>Site Authentication</h3>
+      <div id="auth-sites-list"></div>
+      <button class="btn btn-primary" onclick="showAuthForm()" style="margin-top:12px">+ Add Site Auth</button>
+    </div>
+    <div id="auth-form-card" class="card" style="display:none">
+      <h3>Site Auth</h3>
+      <div class="form-row">
+        <div class="form-group"><label>Domain</label><input id="af-domain" placeholder="example.com"></div>
+        <div class="form-group"><label>Method</label><select id="af-method"><option value="none">none</option><option value="basic">basic</option><option value="bearer">bearer</option><option value="form">form</option><option value="oauth2">oauth2</option><option value="cookie">cookie</option><option value="session">session</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Username</label><input id="af-username"></div>
+        <div class="form-group"><label>Password</label><input id="af-password" type="password"></div>
+      </div>
+      <div class="form-group"><label>Login URL (form auth)</label><input id="af-login-url"></div>
+      <div class="form-group"><label>Headers (JSON)</label><textarea id="af-headers" rows="2">{}</textarea></div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="saveAuth()">Save</button>
+        <button class="btn btn-outline" onclick="document.getElementById('auth-form-card').style.display='none'">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Storage -->
+  <section id="tab-storage">
+    <div class="card"><h3>Storage Configuration</h3><div id="storage-config"></div>
+      <div class="btn-group"><button class="btn btn-primary" onclick="saveStorageConfig()">Save Storage Config</button></div>
+    </div>
+  </section>
+
+  <!-- Site Rules -->
+  <section id="tab-site-rules">
+    <div class="card"><h3>Site Rules</h3>
+      <div class="form-group"><label>YAML / JSON</label><textarea id="site-rules-editor" rows="20"></textarea></div>
+      <div class="btn-group"><button class="btn btn-primary" onclick="saveRules('sites')">Save</button></div>
+    </div>
+  </section>
+
+  <!-- Anti-Ban Rules -->
+  <section id="tab-anti-ban">
+    <div class="card"><h3>Anti-Ban Rules</h3>
+      <div class="form-group"><label>YAML / JSON</label><textarea id="anti-ban-editor" rows="20"></textarea></div>
+      <div class="btn-group"><button class="btn btn-primary" onclick="saveRules('anti-ban')">Save</button></div>
+    </div>
+  </section>
+
+  <!-- Parse Rules -->
+  <section id="tab-parse-rules">
+    <div class="card"><h3>Parse Rules</h3>
+      <div class="form-group"><label>YAML / JSON</label><textarea id="parse-rules-editor" rows="20"></textarea></div>
+      <div class="btn-group"><button class="btn btn-primary" onclick="saveRules('parse')">Save</button></div>
+    </div>
+  </section>
+
+  <!-- Import / Export -->
+  <section id="tab-import-export">
+    <div class="card"><h3>Export</h3>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="exportConfig()">Download Export</button>
+        <button class="btn btn-outline" onclick="copyExport()">Copy JSON</button>
+      </div>
+    </div>
+    <div class="card"><h3>Import</h3>
+      <div class="form-group"><label>Paste JSON to import</label><textarea id="import-data" rows="10" placeholder='{"task": {...}, "proxy": {...}, ...}'></textarea></div>
+      <div class="btn-group"><button class="btn btn-primary" onclick="importConfig()">Import</button></div>
+    </div>
+  </section>
+
+  <!-- Change Log -->
+  <section id="tab-changelog">
+    <div class="card"><h3>Recent Changes</h3><div id="changelog-list"></div></div>
+  </section>
+</main>
+
+<script>
+const API = '/api/v1/config';
+let currentExport = null;
+
+// Navigation
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('main section').forEach(s => s.classList.remove('active'));
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    loadTab(btn.dataset.tab);
+  });
+});
+
+function loadTab(tab) {
+  switch(tab) {
+    case 'tasks': loadTaskTemplates(); break;
+    case 'proxy': loadProxyConfig(); break;
+    case 'auth': loadAuthConfig(); break;
+    case 'storage': loadStorageConfig(); break;
+    case 'site-rules': loadRules('sites', 'site-rules-editor'); break;
+    case 'anti-ban': loadRules('anti-ban', 'anti-ban-editor'); break;
+    case 'parse-rules': loadRules('parse', 'parse-rules-editor'); break;
+    case 'changelog': loadChangeLog(); break;
+    case 'import-export': break;
+  }
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const resp = await fetch(API + path, opts);
+  if (!resp.ok) throw new Error(await resp.text());
+  return resp.json();
+}
+
+function toast(msg, type) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + type; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ── Task Templates ───────────────────────────────
+
+async function loadTaskTemplates() {
+  const data = await api('GET', '/tasks');
+  const list = document.getElementById('task-templates-list');
+  const templates = data.templates || {};
+  const names = Object.keys(templates);
+  if (!names.length) { list.innerHTML = '<div class="empty">No templates. Add one below.</div>'; return; }
+  list.innerHTML = '<table><tr><th>Name</th><th>Mode</th><th>Downloader</th><th>Parser</th><th>Timeout</th><th>Actions</th></tr>' +
+    names.map(n => {
+      const t = templates[n];
+      return `<tr>
+        <td><strong>${esc(n)}</strong></td>
+        <td><span class="badge badge-info">${esc(t.scrape_mode||'fetch')}</span></td>
+        <td>${esc(t.downloader_type||'http')}</td>
+        <td>${esc(t.parser_type||'css')}</td>
+        <td>${t.timeout||30}s</td>
+        <td>
+          <button class="btn btn-sm btn-outline" onclick="editTemplate('${esc(n)}')">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteTemplate('${esc(n)}')">Del</button>
+        </td></tr>`;
+    }).join('') + '</table>';
+}
+
+function showTaskForm() {
+  document.getElementById('task-form-card').style.display = 'block';
+  document.getElementById('task-form-title').textContent = 'New Template';
+  document.getElementById('tf-editing').value = '';
+  ['name','desc'].forEach(id => document.getElementById('tf-'+id).value = '');
+  document.getElementById('tf-mode').value = 'fetch';
+  document.getElementById('tf-downloader').value = 'http';
+  document.getElementById('tf-parser').value = 'css';
+  document.getElementById('tf-timeout').value = '30';
+  document.getElementById('tf-retries').value = '3';
+  document.getElementById('tf-rate').value = '1.0';
+  document.getElementById('tf-instructions').value = '{"selectors": {}}';
+  document.getElementById('tf-steps').value = '[]';
+}
+
+function hideTaskForm() { document.getElementById('task-form-card').style.display = 'none'; }
+
+async function editTemplate(name) {
+  const data = await api('GET', '/tasks/' + encodeURIComponent(name));
+  document.getElementById('task-form-card').style.display = 'block';
+  document.getElementById('task-form-title').textContent = 'Edit: ' + name;
+  document.getElementById('tf-editing').value = name;
+  document.getElementById('tf-name').value = name;
+  document.getElementById('tf-desc').value = data.description || '';
+  document.getElementById('tf-mode').value = data.scrape_mode || 'fetch';
+  document.getElementById('tf-downloader').value = data.downloader_type || 'http';
+  document.getElementById('tf-parser').value = data.parser_type || 'css';
+  document.getElementById('tf-timeout').value = data.timeout || 30;
+  document.getElementById('tf-retries').value = data.max_retries || 3;
+  document.getElementById('tf-rate').value = data.rate_limit || 1.0;
+  document.getElementById('tf-instructions').value = JSON.stringify(data.parser_instructions || {}, null, 2);
+  document.getElementById('tf-steps').value = JSON.stringify(data.automate_steps || [], null, 2);
+}
+
+async function saveTemplate() {
+  const name = document.getElementById('tf-name').value.trim();
+  if (!name) return toast('Name is required', 'error');
+  const body = {
+    name: name,
+    description: document.getElementById('tf-desc').value,
+    scrape_mode: document.getElementById('tf-mode').value,
+    downloader_type: document.getElementById('tf-downloader').value,
+    parser_type: document.getElementById('tf-parser').value,
+    timeout: parseFloat(document.getElementById('tf-timeout').value),
+    max_retries: parseInt(document.getElementById('tf-retries').value),
+    rate_limit: parseFloat(document.getElementById('tf-rate').value),
+    parser_instructions: JSON.parse(document.getElementById('tf-instructions').value || '{}'),
+    automate_steps: JSON.parse(document.getElementById('tf-steps').value || '[]'),
+  };
+  try {
+    await api('PUT', '/tasks/' + encodeURIComponent(name), body);
+    hideTaskForm();
+    loadTaskTemplates();
+    checkStatus();
+    toast('Template saved', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteTemplate(name) {
+  if (!confirm('Delete template "' + name + '"?')) return;
+  await api('DELETE', '/tasks/' + encodeURIComponent(name));
+  loadTaskTemplates();
+  checkStatus();
+  toast('Template deleted', 'success');
+}
+
+// ── Proxy ───────────────────────────────────────
+
+async function loadProxyConfig() {
+  const data = await api('GET', '/proxy');
+  document.getElementById('px-enabled').value = String(data.enabled || false);
+  const pools = data.pools || {};
+  const container = document.getElementById('proxy-pools');
+  let html = '';
+  for (const [poolName, pool] of Object.entries(pools)) {
+    const servers = pool.servers || [];
+    html += `<h4 style="margin-top:12px;color:var(--muted)">Pool: ${esc(poolName)} (${pool.rotation_strategy||'round_robin'})</h4>`;
+    if (!servers.length) html += '<div class="empty">No servers</div>';
+    else {
+      html += '<table><tr><th>Host</th><th>Port</th><th>Protocol</th><th>Provider</th><th>Actions</th></tr>';
+      servers.forEach(s => {
+        html += `<tr><td>${esc(s.host)}</td><td>${s.port}</td><td>${esc(s.protocol||'http')}</td><td>${esc(s.provider||'static')}</td>
+          <td><button class="btn btn-sm btn-danger" onclick="deleteProxyServer('${esc(poolName)}','${esc(s.host)}',${s.port})">Del</button></td></tr>`;
+      });
+      html += '</table>';
+    }
+  }
+  container.innerHTML = html || '<div class="empty">No proxy pools configured.</div>';
+}
+
+async function saveProxyConfig() {
+  const body = { enabled: document.getElementById('px-enabled').value === 'true' };
+  try {
+    await api('PUT', '/proxy', body);
+    checkStatus();
+    toast('Proxy config saved', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+function showProxyServerForm(pool) {
+  const host = prompt('Server host:');
+  if (!host) return;
+  const port = parseInt(prompt('Port:', '8080'));
+  if (!port) return;
+  addProxyServer(pool, { host, port, protocol: 'http', provider: 'static' });
+}
+
+async function addProxyServer(pool, server) {
+  try {
+    await api('POST', '/proxy/servers/' + encodeURIComponent(pool), server);
+    loadProxyConfig();
+    checkStatus();
+    toast('Server added', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteProxyServer(pool, host, port) {
+  if (!confirm('Delete ' + host + ':' + port + '?')) return;
+  await api('DELETE', '/proxy/servers/' + encodeURIComponent(pool) + '?host=' + encodeURIComponent(host) + '&port=' + port);
+  loadProxyConfig();
+  checkStatus();
+  toast('Server removed', 'success');
+}
+
+// ── Auth ────────────────────────────────────────
+
+async function loadAuthConfig() {
+  const data = await api('GET', '/auth');
+  const sites = data.sites || {};
+  const container = document.getElementById('auth-sites-list');
+  const names = Object.keys(sites);
+  if (!names.length) { container.innerHTML = '<div class="empty">No site auth configured.</div>'; return; }
+  container.innerHTML = '<table><tr><th>Domain</th><th>Method</th><th>Actions</th></tr>' +
+    names.map(d => `<tr><td><strong>${esc(d)}</strong></td><td><span class="badge badge-info">${esc(sites[d].method||'none')}</span></td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteAuth('${esc(d)}')">Del</button></td></tr>`).join('') + '</table>';
+}
+
+function showAuthForm() {
+  document.getElementById('auth-form-card').style.display = 'block';
+}
+
+async function saveAuth() {
+  const domain = document.getElementById('af-domain').value.trim();
+  if (!domain) return toast('Domain required', 'error');
+  const body = {
+    domain: domain,
+    method: document.getElementById('af-method').value,
+    basic: document.getElementById('af-username').value ? {
+      username: document.getElementById('af-username').value,
+      password: document.getElementById('af-password').value,
+    } : null,
+    form: document.getElementById('af-login-url').value ? {
+      login_url: document.getElementById('af-login-url').value,
+      username: document.getElementById('af-username').value,
+      password: document.getElementById('af-password').value,
+    } : null,
+    headers: JSON.parse(document.getElementById('af-headers').value || '{}'),
+  };
+  try {
+    await api('PUT', '/auth/sites/' + encodeURIComponent(domain), body);
+    document.getElementById('auth-form-card').style.display = 'none';
+    loadAuthConfig();
+    checkStatus();
+    toast('Auth saved', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteAuth(domain) {
+  if (!confirm('Delete auth for ' + domain + '?')) return;
+  await api('DELETE', '/auth/sites/' + encodeURIComponent(domain));
+  loadAuthConfig();
+  checkStatus();
+  toast('Auth deleted', 'success');
+}
+
+// ── Storage ─────────────────────────────────────
+
+async function loadStorageConfig() {
+  const data = await api('GET', '/storage');
+  document.getElementById('storage-config').innerHTML = buildStorageForm(data);
+}
+
+function buildStorageForm(data) {
+  const sections = ['postgres','mongodb','redis','s3','kafka','local'];
+  let html = '';
+  for (const sec of sections) {
+    const cfg = data[sec] || {};
+    html += `<h4 style="margin-top:12px;color:var(--muted)">${sec.toUpperCase()}</h4>`;
+    html += '<div class="form-row">';
+    for (const [key, val] of Object.entries(cfg)) {
+      if (typeof val === 'boolean' || typeof val === 'string' || typeof val === 'number') {
+        html += `<div class="form-group"><label>${key}</label><input id="st-${sec}-${key}" value="${esc(String(val))}" data-section="${sec}" data-key="${key}"></div>`;
+      }
+    }
+    html += '</div>';
+  }
+  html += `<div class="form-group"><label>Default Output</label><select id="st-default-output">${sections.map(s => `<option value="${s}" ${data.default_output===s?'selected':''}>${s}</option>`).join('')}</select></div>`;
+  return html;
+}
+
+async function saveStorageConfig() {
+  const body = { default_output: document.getElementById('st-default-output').value };
+  const sections = ['postgres','mongodb','redis','s3','kafka','local'];
+  for (const sec of sections) {
+    body[sec] = {};
+    document.querySelectorAll(`[data-section="${sec}"]`).forEach(el => {
+      let val = el.value;
+      if (val === 'true') val = true;
+      else if (val === 'false') val = false;
+      else if (!isNaN(val) && val !== '') val = Number(val);
+      body[sec][el.dataset.key] = val;
+    });
+  }
+  try {
+    await api('PUT', '/storage', body);
+    checkStatus();
+    toast('Storage config saved', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ── Rules ───────────────────────────────────────
+
+async function loadRules(type, editorId) {
+  const data = await api('GET', '/rules/' + type);
+  document.getElementById(editorId).value = jsToYaml(data);
+}
+
+function jsToYaml(obj, indent = 0) {
+  if (obj === null || obj === undefined) return 'null';
+  if (typeof obj !== 'object') return JSON.stringify(obj);
+  if (Array.isArray(obj)) {
+    if (!obj.length) return '[]';
+    return obj.map(item => '\n' + '  '.repeat(indent) + '- ' + jsToYaml(item, indent + 1).trimStart()).join('');
+  }
+  const keys = Object.keys(obj);
+  if (!keys.length) return '{}';
+  return keys.map(k => {
+    const val = obj[k];
+    if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+      return '  '.repeat(indent) + k + ':\n' + jsToYaml(val, indent + 1);
+    }
+    return '  '.repeat(indent) + k + ': ' + jsToYaml(val, indent);
+  }).join('\n');
+}
+
+async function saveRules(type) {
+  const editorId = type === 'sites' ? 'site-rules-editor' : type === 'anti-ban' ? 'anti-ban-editor' : 'parse-rules-editor';
+  const raw = document.getElementById(editorId).value;
+  try {
+    // Try JSON first, fallback to YAML-like (send as-is for simple key-value)
+    let data;
+    try { data = JSON.parse(raw); } catch { data = raw; }
+    await api('PUT', '/rules/' + type, data);
+    checkStatus();
+    toast('Rules saved', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ── Import / Export ─────────────────────────────
+
+async function exportConfig() {
+  const data = await api('GET', '/export');
+  currentExport = data;
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'scrapebot-config-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  toast('Config exported', 'success');
+}
+
+async function copyExport() {
+  const data = await api('GET', '/export');
+  currentExport = data;
+  await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+  toast('Copied to clipboard', 'success');
+}
+
+async function importConfig() {
+  const raw = document.getElementById('import-data').value;
+  if (!raw) return toast('Paste config JSON first', 'error');
+  try {
+    const data = JSON.parse(raw);
+    const result = await api('POST', '/import', data);
+    toast('Imported. Sections: ' + JSON.stringify(result.results), 'success');
+    checkStatus();
+  } catch(e) { toast('Import error: ' + e.message, 'error'); }
+}
+
+// ── Change Log ──────────────────────────────────
+
+async function loadChangeLog() {
+  const data = await api('GET', '/changelog?limit=50');
+  const container = document.getElementById('changelog-list');
+  if (!data.length) { container.innerHTML = '<div class="empty">No changes yet.</div>'; return; }
+  container.innerHTML = '<table><tr><th>Time</th><th>Action</th><th>Section</th></tr>' +
+    data.reverse().map(e => `<tr><td>${esc(e.timestamp)}</td><td>${esc(e.action)}</td><td>${esc(e.section)}</td></tr>`).join('') + '</table>';
+}
+
+// ── Status ──────────────────────────────────────
+
+async function checkStatus() {
+  try {
+    const data = await api('GET', '/status');
+    const dot = document.querySelector('#status-indicator .status-dot');
+    const dirtyCount = document.getElementById('dirty-count');
+    if (data.needs_save) {
+      dot.className = 'status-dot dirty';
+      dirtyCount.style.display = 'inline';
+      dirtyCount.textContent = data.dirty_sections.length + ' unsaved';
+    } else {
+      dot.className = 'status-dot ok';
+      dirtyCount.style.display = 'none';
+    }
+  } catch(e) {}
+}
+
+async function saveAll() {
+  try {
+    await api('POST', '/save');
+    checkStatus();
+    toast('All configs saved', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Init
+loadTaskTemplates();
+checkStatus();
+setInterval(checkStatus, 30000);
+</script>
+</body>
+</html>
