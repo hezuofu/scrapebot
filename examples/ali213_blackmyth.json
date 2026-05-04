@@ -42,44 +42,35 @@
           "name": "title",
           "description": "帖子标题",
           "type": "xpath",
-          "selector": "//span[@id='thread_subject']//text()",
+          "selector": "//a[@id='thread_subject']/text()",
           "required": true
         },
         {
           "name": "author",
           "description": "楼主用户名",
           "type": "xpath",
-          "selector": "//div[@class='authi']//a[@class='xw1']/text()",
+          "selector": "(//div[@class='authi']//a[@class='xw1'])[1]/text()",
           "required": true
         },
         {
           "name": "post_time",
           "description": "发布时间",
           "type": "xpath",
-          "selector": "//div[@class='authi']//em[contains(text(),'发表于')]/text()"
+          "selector": "(//em[contains(@id,'authorposton')])[1]/text()"
         },
         {
           "name": "content",
-          "description": "帖子正文",
+          "description": "帖子正文内容",
           "type": "xpath",
           "selector": "//td[@class='t_f']//text()",
           "required": true
         },
         {
           "name": "images",
-          "description": "帖子内图片",
-          "type": "css",
-          "selector": "td.t_f img",
-          "multiple": true,
-          "attribute": "src"
-        },
-        {
-          "name": "attachments",
-          "description": "附件下载链接",
-          "type": "css",
-          "selector": "td.t_f a[href*='attachment']",
-          "multiple": true,
-          "attribute": "href"
+          "description": "帖子内图片链接",
+          "type": "xpath",
+          "selector": "//td[@class='t_f']//img/@src",
+          "multiple": true
         }
       ],
       "pagination_type": "next_link",
@@ -96,23 +87,22 @@
           "name": "title",
           "description": "帖子标题",
           "type": "xpath",
-          "selector": "//span[@id='thread_subject']//text()",
+          "selector": "//a[@id='thread_subject']/text()",
           "required": true
         },
         {
           "name": "content",
-          "description": "帖子正文",
+          "description": "帖子正文内容",
           "type": "xpath",
           "selector": "//td[@class='t_f']//text()",
           "required": true
         },
         {
           "name": "images",
-          "description": "帖子内图片",
-          "type": "css",
-          "selector": "td.t_f img",
-          "multiple": true,
-          "attribute": "src"
+          "description": "帖子内图片链接",
+          "type": "xpath",
+          "selector": "//td[@class='t_f']//img/@src",
+          "multiple": true
         }
       ],
       "pagination_type": "next_link",

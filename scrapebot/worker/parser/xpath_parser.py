@@ -8,6 +8,18 @@ from scrapebot.types import ParseResult
 from scrapebot.worker.parser.base import BaseParser
 
 
+def _join_results(result: list) -> str:
+    parts: list[str] = []
+    for el in result:
+        if hasattr(el, "text_content"):
+            parts.append(el.text_content().strip())
+        elif isinstance(el, str):
+            parts.append(el.strip())
+        else:
+            parts.append(str(el))
+    return " ".join(p for p in parts if p)
+
+
 class XPathParser(BaseParser):
     async def parse(self, html: str, instructions: dict[str, Any]) -> ParseResult:
         try:
@@ -29,19 +41,14 @@ class XPathParser(BaseParser):
                 item: dict[str, Any] = {}
                 for field, xpath in selectors.items():
                     result = row.xpath(xpath) if xpath.startswith(".") else tree.xpath(xpath)
-                    if result:
-                        el = result[0]
-                        item[field] = el.text_content().strip() if hasattr(el, "text_content") else str(el)
-                    else:
-                        item[field] = None
+                    item[field] = _join_results(result) if result else None
                 items.append(item)
         else:
             item: dict[str, Any] = {}
             for field, xpath in selectors.items():
                 result = tree.xpath(xpath)
                 if result:
-                    el = result[0]
-                    item[field] = el.text_content().strip() if hasattr(el, "text_content") else str(el)
+                    item[field] = _join_results(result)
                 else:
                     item[field] = None
                     errors.append(f"XPath '{xpath}' matched nothing for field '{field}'")
