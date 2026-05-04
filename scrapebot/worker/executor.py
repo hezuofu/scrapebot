@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Callable, Coroutine
 from datetime import datetime
 from typing import Any
 
@@ -9,18 +9,15 @@ from scrapebot.config.settings import Settings
 from scrapebot.events.bus import EventBus
 from scrapebot.events.types import Event, EventType
 from scrapebot.pipeline.base import Pipeline
-from scrapebot.pipeline.cleaning.field_cleaner import FieldCleaner
-from scrapebot.pipeline.cleaning.validator import DataValidator
 from scrapebot.types import (
     DownloadResult,
-    ParseResult,
     ScrapeMode,
     Task,
     TaskResult,
     TaskStatus,
 )
 from scrapebot.worker.downloader.selector import DownloaderSelector
-from scrapebot.worker.parser.composite_parser import CompositeParser
+from scrapebot.worker.parser.base import BaseParser
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +27,38 @@ class Executor:
         self,
         settings: Settings,
         event_bus: EventBus,
+        downloader_selector: DownloaderSelector | None = None,
+        parser: BaseParser | None = None,
         pipeline: Pipeline | None = None,
+        max_concurrency: int = 10,
     ) -> None:
         self.settings = settings
         self._bus = event_bus
-        self._selector = DownloaderSelector(site_rules=settings.site_rules)
-        self._parser = CompositeParser()
-        self._pipeline = pipeline or Pipeline().add(FieldCleaner()).add(DataValidator())
+        self._selector = downloader_selector or DownloaderSelector(site_rules=settings.site_rules)
+        self._parser = parser
+        self._pipeline = pipeline or Pipeline()
+        self._semaphore = asyncio.Semaphore(max_concurrency)
 
     async def execute(self, task: Task) -> TaskResult:
+        async with self._semaphore:
+            try:
+                result = await asyncio.wait_for(
+                    self._execute_inner(task),
+                    timeout=task.timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.error("Task %s timed out after %.1fs", task.id, task.timeout)
+                await self._emit(EventType.TASK_FAILED, task, "Task timed out", "error")
+                return TaskResult(
+                    task_id=task.id,
+                    status=TaskStatus.FAILED,
+                    error=f"Timeout after {task.timeout}s",
+                    started_at=datetime.now(),
+                    finished_at=datetime.now(),
+                )
+            return result
+
+    async def _execute_inner(self, task: Task) -> TaskResult:
         await self._emit(EventType.TASK_STARTED, task)
 
         try:
@@ -52,6 +72,8 @@ class Executor:
 
             return await self._parse_and_complete(task, download_result)
 
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             logger.error("Task %s failed: %s", task.id, exc)
             await self._emit(EventType.TASK_FAILED, task, str(exc), "error")
@@ -99,7 +121,12 @@ class Executor:
         now = datetime.now()
 
         await self._emit(EventType.PARSE_STARTED, task)
-        parse_result = await self._parser.parse(download_result.text, task.parser_instructions)
+        if self._parser is not None:
+            parse_result = await self._parser.parse(download_result.text, task.parser_instructions)
+        else:
+            from scrapebot.types import ParseResult
+            parse_result = ParseResult(items=[{"content": download_result.text}])
+
         if parse_result.errors:
             await self._emit(EventType.PARSE_FAILED, task, data={"errors": parse_result.errors}, severity="warning")
         else:

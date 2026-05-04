@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from scrapebot.events.types import Event, EventType
+from scrapebot.events.types import Event
 
 logger = logging.getLogger("scrapebot.events")
 
@@ -20,5 +20,10 @@ class LoggingSubscriber:
         if event.severity == "error":
             level = logging.ERROR
 
-        extra = {"task_id": event.task_id, "event_type": event.type.value}
-        logger.log(level, "[%s] %s %s", event.type.value, event.message, extra)
+        logger.log(
+            level,
+            "[%s] %s  task_id=%s",
+            event.type.value,
+            event.message,
+            event.task_id,
+        )

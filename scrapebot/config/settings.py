@@ -13,6 +13,7 @@ class SchedulerSettings(BaseSettings):
     max_concurrent_tasks: int = 100
     default_priority: int = 0
     task_timeout: float = 60.0
+    queue: str = "priority"
 
 
 class WorkerSettings(BaseSettings):
@@ -21,6 +22,8 @@ class WorkerSettings(BaseSettings):
     playwright_headless: bool = True
     playwright_pool_size: int = 3
     max_retries: int = 3
+    parser: str = "composite"
+    pipeline_steps: list[str] = Field(default_factory=lambda: ["field_cleaner", "validator"])
 
 
 class RetrySettings(BaseSettings):

@@ -4,33 +4,29 @@ import re
 
 
 class CaptchaDetector:
-    CAPTCHA_PATTERNS = [
-        r"g-recaptcha",
-        r"h-captcha",
-        r"cf-challenge",
-        r"recaptcha",
-        r"captcha",
-        r"verify you are a human",
-        r"are you a robot",
-        r"cloudflare",
-        r"ddos-guard",
-        r"incapsula",
-    ]
+    _PATTERN = re.compile(
+        r"g-recaptcha|h-captcha|cf-challenge|recaptcha|captcha|"
+        r"verify you are a human|are you a robot|cloudflare|"
+        r"ddos-guard|incapsula",
+        re.IGNORECASE,
+    )
+
+    _TYPE_PATTERNS = {
+        "recaptcha": re.compile(r"g-recaptcha", re.IGNORECASE),
+        "hcaptcha": re.compile(r"h-captcha", re.IGNORECASE),
+        "cloudflare": re.compile(r"cf-challenge|cloudflare", re.IGNORECASE),
+    }
+
+    def __init__(self, trigger: object = None) -> None:
+        self._trigger = trigger
 
     def detect(self, html: str) -> bool:
-        if not html:
-            return False
-        lower = html.lower()
-        return any(re.search(p, lower) for p in self.CAPTCHA_PATTERNS)
+        return bool(html and self._PATTERN.search(html))
 
     def identify_type(self, html: str) -> str | None:
-        lower = html.lower()
-        if re.search(r"g-recaptcha", lower):
-            return "recaptcha"
-        if re.search(r"h-captcha", lower):
-            return "hcaptcha"
-        if re.search(r"cf-challenge|cloudflare", lower):
-            return "cloudflare"
-        if re.search(r"captcha", lower):
+        for name, pattern in self._TYPE_PATTERNS.items():
+            if pattern.search(html):
+                return name
+        if self.detect(html):
             return "generic_captcha"
         return None

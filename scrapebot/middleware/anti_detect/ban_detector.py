@@ -6,25 +6,21 @@ from scrapebot.types import DownloadResult
 
 
 class BanDetector:
-    BAN_PATTERNS = [
-        r"access denied",
-        r"ip\s.*blocked",
-        r"has been blocked",
-        r"your request has been blocked",
-        r"too many requests",
-        r"rate limit exceeded",
-        r"request denied",
-        r"you have been blocked",
-        r"unauthorized access",
-    ]
+    _PATTERN = re.compile(
+        r"access denied|ip.*blocked|has been blocked|"
+        r"your request has been blocked|too many requests|"
+        r"rate limit exceeded|request denied|"
+        r"you have been blocked|unauthorized access",
+        re.IGNORECASE,
+    )
+
+    def __init__(self, trigger: object = None) -> None:
+        self._trigger = trigger
 
     def detect(self, result: DownloadResult) -> bool:
-        if result.status_code in (403, 401):
+        if result.status_code in (403, 401, 429):
             return True
-        if result.status_code == 429:
-            return True
-        lower = result.text.lower()
-        return any(re.search(p, lower) for p in self.BAN_PATTERNS)
+        return bool(self._PATTERN.search(result.text))
 
     def identify_reason(self, result: DownloadResult) -> str | None:
         lower = result.text.lower()

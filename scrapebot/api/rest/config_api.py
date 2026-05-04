@@ -197,6 +197,51 @@ async def import_all_configs(data: dict[str, Any]) -> dict[str, Any]:
     return {"status": "ok", "results": results}
 
 
+# ── Scrape Jobs ───────────────────────────────────────────────
+
+@config_router.get("/jobs")
+async def list_jobs() -> list[dict[str, Any]]:
+    store = _require_store()
+    jobs = store.get_jobs()
+    return [{"job_id": jid, **data} for jid, data in jobs.items()]
+
+
+@config_router.get("/jobs/{job_id}")
+async def get_job(job_id: str) -> dict[str, Any]:
+    store = _require_store()
+    job = store.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return {"job_id": job_id, **job}
+
+
+@config_router.put("/jobs/{job_id}")
+async def save_job(job_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    store = _require_store()
+    ok = await store.save_job(job_id, data)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to save job")
+    return {"status": "ok", "job_id": job_id}
+
+
+@config_router.delete("/jobs/{job_id}")
+async def delete_job(job_id: str) -> dict[str, Any]:
+    store = _require_store()
+    ok = await store.delete_job(job_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return {"status": "ok", "job_id": job_id, "deleted": True}
+
+
+@config_router.post("/jobs/{job_id}/expand")
+async def expand_job(job_id: str) -> dict[str, Any]:
+    store = _require_store()
+    result = await store.run_job(job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return result
+
+
 # ── Change Log ────────────────────────────────────────────────
 
 @config_router.get("/changelog")

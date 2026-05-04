@@ -76,6 +76,7 @@ tr:hover { background: rgba(56,189,248,.05); }
   <button data-tab="site-rules">Site Rules</button>
   <button data-tab="anti-ban">Anti-Ban</button>
   <button data-tab="parse-rules">Parse Rules</button>
+  <button data-tab="jobs">Jobs</button>
   <button data-tab="import-export">Import / Export</button>
   <button data-tab="changelog">Change Log</button>
 </nav>
@@ -182,6 +183,40 @@ tr:hover { background: rgba(56,189,248,.05); }
     </div>
   </section>
 
+  <!-- Scrape Jobs -->
+  <section id="tab-jobs">
+    <div class="card">
+      <h3>Scrape Jobs</h3>
+      <div id="jobs-list"></div>
+      <button class="btn btn-primary" onclick="showJobForm()" style="margin-top:12px">+ New Job</button>
+    </div>
+    <div id="job-form-card" class="card" style="display:none">
+      <h3 id="job-form-title">New Job</h3>
+      <div class="form-row">
+        <div class="form-group"><label>Job ID</label><input id="jf-id" placeholder="my_spider"></div>
+        <div class="form-group"><label>Name</label><input id="jf-name" placeholder="My Spider"></div>
+      </div>
+      <div class="form-group"><label>Description</label><input id="jf-desc"></div>
+      <div class="form-group"><label>Start URLs (one per line)</label><textarea id="jf-urls" rows="3"></textarea></div>
+      <div class="form-group"><label>Rules & Selectors (JSON)</label><textarea id="jf-rules" rows="12" placeholder='[{"url": "https://...", "method": "GET", "selectors": [...]}]'></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>Concurrency</label><input id="jf-concurrency" type="number" value="2"></div>
+        <div class="form-group"><label>Download Delay (s)</label><input id="jf-delay" type="number" value="1" step="0.5"></div>
+        <div class="form-group"><label>Max Retries</label><input id="jf-retries" type="number" value="3"></div>
+      </div>
+      <div class="form-group"><label>Storage (JSON)</label><textarea id="jf-storage" rows="4" placeholder='{"type": "file", "file": {"output_dir": "output", "format": "json"}}'></textarea></div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="saveJob()">Save Job</button>
+        <button class="btn btn-primary" onclick="runJob()">Run Job</button>
+        <button class="btn btn-outline" onclick="document.getElementById('job-form-card').style.display='none'">Cancel</button>
+      </div>
+      <div id="job-expand-result" class="card" style="display:none;margin-top:12px;background:var(--bg)">
+        <h4>Expanded Tasks</h4>
+        <pre id="job-expand-output" style="font-size:0.75rem;overflow:auto;max-height:300px"></pre>
+      </div>
+    </div>
+  </section>
+
   <!-- Import / Export -->
   <section id="tab-import-export">
     <div class="card"><h3>Export</h3>
@@ -227,6 +262,7 @@ function loadTab(tab) {
     case 'anti-ban': loadRules('anti-ban', 'anti-ban-editor'); break;
     case 'parse-rules': loadRules('parse', 'parse-rules-editor'); break;
     case 'changelog': loadChangeLog(); break;
+    case 'jobs': loadJobs(); break;
     case 'import-export': break;
   }
 }
@@ -596,6 +632,96 @@ async function saveAll() {
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Jobs ────────────────────────────────────────
+
+async function loadJobs() {
+  const data = await api('GET', '/jobs');
+  const list = document.getElementById('jobs-list');
+  if (!data.length) { list.innerHTML = '<div class="empty">No jobs. Create one below.</div>'; return; }
+  list.innerHTML = '<table><tr><th>Job ID</th><th>Name</th><th>URLs</th><th>Actions</th></tr>' +
+    data.map(j => `<tr>
+      <td><strong>${esc(j.job_id)}</strong></td>
+      <td>${esc(j.name||'')}</td>
+      <td>${(j.start_urls||[]).length} URLs</td>
+      <td>
+        <button class="btn btn-sm btn-outline" onclick="editJob('${esc(j.job_id)}')">Edit</button>
+        <button class="btn btn-sm btn-outline" onclick="expandJob('${esc(j.job_id)}')">Expand</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteJob('${esc(j.job_id)}')">Del</button>
+      </td></tr>`).join('') + '</table>';
+}
+
+function showJobForm() {
+  document.getElementById('job-form-card').style.display='block';
+  document.getElementById('job-form-title').textContent='New Job';
+  ['id','name','desc','urls','rules','storage'].forEach(id => document.getElementById('jf-'+id).value='');
+  document.getElementById('jf-concurrency').value='2';
+  document.getElementById('jf-delay').value='1';
+  document.getElementById('jf-retries').value='3';
+  document.getElementById('job-expand-result').style.display='none';
+}
+
+async function editJob(jobId) {
+  const data = await api('GET', '/jobs/'+encodeURIComponent(jobId));
+  document.getElementById('job-form-card').style.display='block';
+  document.getElementById('job-form-title').textContent='Edit: '+jobId;
+  document.getElementById('jf-id').value=jobId;
+  document.getElementById('jf-name').value=data.name||'';
+  document.getElementById('jf-desc').value=data.description||'';
+  document.getElementById('jf-urls').value=(data.start_urls||[]).join('\n');
+  document.getElementById('jf-rules').value=JSON.stringify(data.rules||[],null,2);
+  document.getElementById('jf-concurrency').value=data.concurrency||2;
+  document.getElementById('jf-delay').value=data.download_delay||1;
+  document.getElementById('jf-retries').value=data.max_retries||3;
+  document.getElementById('jf-storage').value=JSON.stringify(data.storage||{},null,2);
+  document.getElementById('job-expand-result').style.display='none';
+}
+
+async function saveJob() {
+  const jobId=document.getElementById('jf-id').value.trim();
+  if(!jobId) return toast('Job ID required','error');
+  const body={
+    name:document.getElementById('jf-name').value,
+    description:document.getElementById('jf-desc').value,
+    start_urls:document.getElementById('jf-urls').value.split('\n').filter(u=>u.trim()),
+    rules:JSON.parse(document.getElementById('jf-rules').value||'[]'),
+    concurrency:parseInt(document.getElementById('jf-concurrency').value),
+    download_delay:parseFloat(document.getElementById('jf-delay').value),
+    max_retries:parseInt(document.getElementById('jf-retries').value),
+    storage:JSON.parse(document.getElementById('jf-storage').value||'{}'),
+  };
+  try {
+    await api('PUT','/jobs/'+encodeURIComponent(jobId),body);
+    document.getElementById('job-form-card').style.display='none';
+    loadJobs(); checkStatus();
+    toast('Job saved','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+async function expandJob(jobId) {
+  try {
+    const data = await api('POST','/jobs/'+encodeURIComponent(jobId)+'/expand');
+    document.getElementById('job-form-card').style.display='block';
+    document.getElementById('job-form-title').textContent='Expanded: '+jobId;
+    document.getElementById('job-expand-result').style.display='block';
+    document.getElementById('job-expand-output').textContent=
+      'Job: '+JSON.stringify(data.job,null,2)+'\n\nTasks ('+data.tasks.length+'):\n'+JSON.stringify(data.tasks,null,2);
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+async function runJob() {
+  const jobId=document.getElementById('jf-id').value.trim();
+  if(!jobId) return;
+  await saveJob();
+  await expandJob(jobId);
+}
+
+async function deleteJob(jobId) {
+  if(!confirm('Delete job "'+jobId+'"?')) return;
+  await api('DELETE','/jobs/'+encodeURIComponent(jobId));
+  loadJobs(); checkStatus();
+  toast('Job deleted','success');
+}
 
 // Init
 loadTaskTemplates();

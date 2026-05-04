@@ -1,18 +1,10 @@
-"""
-Browser Automator — direct browser operation mode.
-
-Unlike PlaywrightDownloader (which renders a page and returns HTML for local parsing),
-the BrowserAutomator performs interactive actions (click, scroll, type, wait) and
-extracts data directly from the live browser DOM — no intermediate HTML parsing step.
-"""
-
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
 from scrapebot.events.bus import EventBus
-from scrapebot.events.types import Event, EventType
 from scrapebot.types import DownloadResult
 
 
@@ -41,11 +33,15 @@ class BrowserAutomator:
     async def _ensure_browser(self) -> None:
         if self._playwright is None:
             from playwright.async_api import async_playwright
-
             pw = await async_playwright().start()
             self._playwright = pw
-            browser_launcher = getattr(pw, self._browser_type)
-            self._browser = await browser_launcher.launch(headless=self._headless)
+            try:
+                browser_launcher = getattr(pw, self._browser_type)
+                self._browser = await browser_launcher.launch(headless=self._headless)
+            except Exception:
+                await pw.stop()
+                self._playwright = None
+                raise
 
     async def execute(
         self,
@@ -75,21 +71,18 @@ class BrowserAutomator:
                 await self._execute_step(page, step, timeout)
 
             elapsed = (time.monotonic() - start_time) * 1000
+            content = await page.content()
 
             return DownloadResult(
                 url=page.url,
                 status_code=200,
-                text=await page.content(),
-                content=(await page.content()).encode(),
+                text=content,
+                content=content.encode(),
                 elapsed_ms=round(elapsed, 2),
             )
         except Exception as exc:
             elapsed = (time.monotonic() - start_time) * 1000
-            return DownloadResult(
-                url=url,
-                elapsed_ms=round(elapsed, 2),
-                error=str(exc),
-            )
+            return DownloadResult(url=url, elapsed_ms=round(elapsed, 2), error=str(exc))
         finally:
             await context.close()
 
@@ -103,55 +96,43 @@ class BrowserAutomator:
             raise ValueError(f"Unsupported action: {action}")
 
         if action == "navigate":
-            wait_until = step.get("wait_until", "domcontentloaded")
-            await page.goto(step["url"], timeout=timeout * 1000, wait_until=wait_until)
-
+            await page.goto(step["url"], timeout=timeout * 1000,
+                            wait_until=step.get("wait_until", "domcontentloaded"))
         elif action == "click":
             await page.wait_for_selector(selector, timeout=timeout * 1000)
             await page.click(selector, **options)
-
         elif action == "type":
             await page.wait_for_selector(selector, timeout=timeout * 1000)
             await page.fill(selector, str(value) if value else "", **options)
-
         elif action == "scroll":
             if value:
                 await page.evaluate(f"window.scrollBy(0, {value})")
             else:
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-
         elif action == "wait":
-            import asyncio
             await asyncio.sleep(float(value or 1.0))
-
         elif action == "wait_for_selector":
-            await page.wait_for_selector(
-                selector,
-                timeout=(float(value) if value else timeout) * 1000,
-                **options,
-            )
-
+            await page.wait_for_selector(selector, timeout=(float(value) if value else timeout) * 1000, **options)
         elif action == "wait_for_navigation":
             await page.wait_for_load_state(value or "networkidle", **options)
-
         elif action == "select":
             await page.select_option(selector, value, **options)
-
         elif action == "hover":
             await page.hover(selector, **options)
-
         elif action == "press":
             await page.press(selector, str(value) if value else "Enter", **options)
-
         elif action == "screenshot":
-            path = step.get("path", f"screenshot_{int(time.time())}.png")
-            full_page = step.get("full_page", True)
-            await page.screenshot(path=path, full_page=full_page)
-
+            await page.screenshot(
+                path=step.get("path", f"screenshot_{int(time.time())}.png"),
+                full_page=step.get("full_page", True))
         elif action == "evaluate":
-            result = await page.evaluate(str(value))
-            step["_result"] = result
-
+            step["_result"] = await page.evaluate(str(value))
+        elif action == "extract":
+            instructions = step.get("instructions", {})
+            step["_result"] = await self.extract(page, instructions)
+        elif action == "extract_all":
+            instructions = step.get("instructions", {})
+            step["_result"] = await self.extract(page, instructions)
         elif action == "fill_form":
             fields = step.get("fields", {})
             for field_selector, field_value in fields.items():
@@ -160,11 +141,7 @@ class BrowserAutomator:
             if submit_selector:
                 await page.click(submit_selector)
 
-    async def extract(
-        self,
-        page: Any,
-        instructions: dict[str, Any],
-    ) -> list[dict[str, Any]]:
+    async def extract(self, page: Any, instructions: dict[str, Any]) -> list[dict[str, Any]]:
         selectors = instructions.get("selectors", {})
         extract_list = instructions.get("extract_list", False)
         list_selector = instructions.get("list_selector", "body")
@@ -179,10 +156,7 @@ class BrowserAutomator:
                         child = await el.query_selector(css.lstrip("& "))
                         if child:
                             attr = (instructions.get("attributes", {}) or {}).get(field)
-                            if attr:
-                                item[field] = await child.get_attribute(attr)
-                            else:
-                                item[field] = await child.inner_text()
+                            item[field] = await child.get_attribute(attr) if attr else await child.inner_text()
                         else:
                             item[field] = None
                     except Exception:
@@ -196,10 +170,7 @@ class BrowserAutomator:
                     el = await page.query_selector(css)
                     if el:
                         attr = (instructions.get("attributes", {}) or {}).get(field)
-                        if attr:
-                            item[field] = await el.get_attribute(attr)
-                        else:
-                            item[field] = await el.inner_text()
+                        item[field] = await el.get_attribute(attr) if attr else await el.inner_text()
                     else:
                         item[field] = None
                 except Exception:

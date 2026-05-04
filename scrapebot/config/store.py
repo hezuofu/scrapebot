@@ -177,6 +177,46 @@ class ConfigStore:
     async def update_storage_config(self, data: dict[str, Any]) -> bool:
         return await self._update_dataclass("storage", data)
 
+    # ── jobs ─────────────────────────────────────────────────
+
+    def get_jobs(self) -> dict[str, Any]:
+        return self._get_or_default("jobs")
+
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        jobs = self._get_or_default("jobs")
+        return jobs.get(job_id)
+
+    async def save_job(self, job_id: str, job_data: dict[str, Any]) -> bool:
+        async with self._lock:
+            jobs = self._get_or_default("jobs")
+            jobs[job_id] = job_data
+            self._dirty.add("jobs")
+            return self._save_sync("jobs")
+
+    async def delete_job(self, job_id: str) -> bool:
+        async with self._lock:
+            jobs = self._get_or_default("jobs")
+            if job_id in jobs:
+                del jobs[job_id]
+                self._dirty.add("jobs")
+                return self._save_sync("jobs")
+            return False
+
+    def list_job_ids(self) -> list[str]:
+        return sorted(self._get_or_default("jobs").keys())
+
+    async def run_job(self, job_id: str) -> dict[str, Any] | None:
+        """Build a ScrapeJob from stored config and expand it into tasks."""
+        from scrapebot.spider.builder import build_job_from_config
+        job_data = self.get_job(job_id)
+        if job_data is None:
+            return None
+        job = build_job_from_config(job_data)
+        return {
+            "job": job.model_dump(),
+            "tasks": [t.model_dump() for t in SpiderRunner(job).expand()],
+        }
+
     # ── rules ─────────────────────────────────────────────────
 
     def get_site_rules(self) -> dict[str, Any]:

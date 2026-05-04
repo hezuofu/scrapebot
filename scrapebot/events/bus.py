@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable, Coroutine
 from typing import Any
 
@@ -17,8 +17,7 @@ class EventBus:
     def __init__(self) -> None:
         self._subscribers: dict[str, list[EventHandler]] = defaultdict(list)
         self._global_subscribers: list[EventHandler] = []
-        self._history: list[Event] = []
-        self._history_max: int = 1000
+        self._history: deque[Event] = deque(maxlen=1000)
         self._lock = asyncio.Lock()
 
     def subscribe(self, event_type: EventType | str, handler: EventHandler) -> None:
@@ -42,8 +41,6 @@ class EventBus:
     async def publish(self, event: Event) -> None:
         async with self._lock:
             self._history.append(event)
-            if len(self._history) > self._history_max:
-                self._history = self._history[-self._history_max:]
 
         await self._notify(event.type.value, event)
         for handler in self._global_subscribers:
@@ -68,7 +65,7 @@ class EventBus:
         task_id: str | None = None,
         limit: int = 100,
     ) -> list[Event]:
-        results = self._history
+        results: list[Event] = list(self._history)
         if event_type:
             key = event_type.value if isinstance(event_type, EventType) else event_type
             results = [e for e in results if e.type.value == key]

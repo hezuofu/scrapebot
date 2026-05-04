@@ -10,6 +10,7 @@ from scrapebot.types import (
     TaskStatus,
     WorkerInfo,
 )
+from scrapebot.registry import Registry, get_registry, reset_registry, RegistryError
 
 __all__ = [
     "Task",
@@ -22,4 +23,8 @@ __all__ = [
     "ScrapeConfig",
     "ScrapeMode",
     "WorkerInfo",
+    "Registry",
+    "get_registry",
+    "reset_registry",
+    "RegistryError",
 ]

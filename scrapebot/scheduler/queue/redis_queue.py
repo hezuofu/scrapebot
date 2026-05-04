@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -10,10 +9,14 @@ from scrapebot.types import Task
 
 
 class RedisQueue(AbstractQueue):
-    def __init__(self, redis_url: str = "redis://localhost:6379/0", key: str = "scrapebot:queue") -> None:
+    def __init__(
+        self,
+        redis_url: str = "redis://localhost:6379/0",
+        key: str = "scrapebot:queue",
+    ) -> None:
         self._redis_url = redis_url
         self._key = key
-        self._pending_key = f"{key}:pending"
+        self._processing_key = f"{key}:processing"
         self._redis: aioredis.Redis | None = None
 
     async def _ensure_connected(self) -> None:
@@ -22,23 +25,51 @@ class RedisQueue(AbstractQueue):
 
     async def push(self, task: Task) -> None:
         await self._ensure_connected()
-        data = task.model_dump_json()
         score = task.priority if task.scheduled_at is None else task.scheduled_at.timestamp()
-        await self._redis.zadd(self._key, {data: score})
+        await self._redis.zadd(self._key, {task.model_dump_json(): score})
 
     async def pop(self) -> Task | None:
         await self._ensure_connected()
-        results = await self._redis.zpopmin(self._key, count=1)
-        if not results:
+        # Atomic: move from queue to processing, then parse
+        raw = await self._redis.eval(
+            """
+            local items = redis.call('ZRANGE', KEYS[1], 0, 0)
+            if #items == 0 then return nil end
+            redis.call('ZREM', KEYS[1], items[1])
+            redis.call('SADD', KEYS[2], items[1])
+            return items[1]
+            """,
+            2, self._key, self._processing_key,
+        )
+        if raw is None:
             return None
-        raw = results[0][0]
-        task = Task.model_validate_json(raw)
-        await self._redis.sadd(self._pending_key, task.id)
-        return task
+        return Task.model_validate_json(raw)
 
     async def ack(self, task_id: str) -> None:
         await self._ensure_connected()
-        await self._redis.srem(self._pending_key, task_id)
+        # Remove from processing set — find by task_id
+        members = await self._redis.smembers(self._processing_key)
+        for raw in members:
+            try:
+                if f'"id":"{task_id}"' in raw:
+                    await self._redis.srem(self._processing_key, raw)
+                    break
+            except Exception:
+                continue
+
+    async def recover(self) -> list[Task]:
+        """Recover un-acked tasks from processing set (e.g. after crash)."""
+        await self._ensure_connected()
+        members = await self._redis.smembers(self._processing_key)
+        tasks = []
+        for raw in members:
+            try:
+                task = Task.model_validate_json(raw)
+                tasks.append(task)
+                await self._redis.srem(self._processing_key, raw)
+            except Exception:
+                continue
+        return tasks
 
     async def size(self) -> int:
         await self._ensure_connected()
@@ -55,15 +86,16 @@ class RedisQueue(AbstractQueue):
         await self._ensure_connected()
         results = await self._redis.zrange(self._key, 0, -1)
         for raw in results:
-            try:
-                data = json.loads(raw)
-                if data.get("id") == task_id:
-                    await self._redis.zrem(self._key, raw)
-                    return True
-            except json.JSONDecodeError:
-                continue
+            if f'"id":"{task_id}"' in raw:
+                await self._redis.zrem(self._key, raw)
+                return True
         return False
 
     async def clear(self) -> None:
         await self._ensure_connected()
-        await self._redis.delete(self._key, self._pending_key)
+        await self._redis.delete(self._key, self._processing_key)
+
+    async def close(self) -> None:
+        if self._redis:
+            await self._redis.aclose()
+            self._redis = None

@@ -12,11 +12,13 @@ class ProxyPool:
         for proxy in (proxies or []):
             self._proxies[proxy] = {"failures": 0, "cooldown_until": 0}
 
-    def add(self, proxy: str) -> None:
-        self._proxies[proxy] = {"failures": 0, "cooldown_until": 0}
+    async def add(self, proxy: str) -> None:
+        async with self._lock:
+            self._proxies[proxy] = {"failures": 0, "cooldown_until": 0}
 
-    def remove(self, proxy: str) -> None:
-        self._proxies.pop(proxy, None)
+    async def remove(self, proxy: str) -> None:
+        async with self._lock:
+            self._proxies.pop(proxy, None)
 
     async def mark_failure(self, proxy: str) -> None:
         async with self._lock:

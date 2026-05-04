@@ -152,12 +152,29 @@ class RuleSection:
         return {}
 
 
+class JobSection:
+    name = "jobs"
+    filename = "jobs.yaml"
+
+    def load(self, path: Path) -> dict[str, Any]:
+        if not path.exists():
+            return {}
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+    def serialize(self, data: dict[str, Any]) -> dict[str, Any]:
+        return dict(data) if data else {}
+
+    def default(self) -> dict[str, Any]:
+        return {}
+
+
 # Registry of all config sections
 _REGISTRY: dict[str, ConfigSection] = {
     "task": TaskSection(),
     "proxy": ProxySection(),
     "auth": AuthSection(),
     "storage": StorageSection(),
+    "jobs": JobSection(),
     "site_rules": RuleSection("site_rules", "site_rules.yaml"),
     "anti_ban_rules": RuleSection("anti_ban_rules", "anti_ban_rules.yaml"),
     "parse_rules": RuleSection("parse_rules", "parse_rules.yaml"),
