@@ -54,19 +54,25 @@ class MiddlewareChain:
         async def wrapped(task: Task) -> TaskResult:
             await self._rate_limiter.acquire()
 
-            task.headers = self._ua_rotator.enrich(task.headers)
-            task.headers = self._fingerprint.enrich(task.headers)
+            enriched_headers = self._fingerprint.enrich(
+                self._ua_rotator.enrich(dict(task.headers))
+            )
+            enriched_proxy = task.proxy
+            if self._proxy_enabled and not enriched_proxy:
+                enriched_proxy = await self._proxy_rotator.get_proxy()
 
-            if self._proxy_enabled and not task.proxy:
-                task.proxy = await self._proxy_rotator.get_proxy()
+            enriched_task = task.model_copy(update={
+                "headers": enriched_headers,
+                "proxy": enriched_proxy,
+            })
 
-            result = await self._retry.execute(handler, task)
+            result = await self._retry.execute(handler, enriched_task)
 
             if result.download_result:
                 if self._captcha_detector.detect(result.download_result.text):
-                    await self._action_trigger.on_captcha(task, result)
+                    await self._action_trigger.on_captcha(enriched_task, result)
                 if self._ban_detector.detect(result.download_result):
-                    await self._action_trigger.on_ban(task, result)
+                    await self._action_trigger.on_ban(enriched_task, result)
 
             return result
 

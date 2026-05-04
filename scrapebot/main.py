@@ -23,7 +23,7 @@ import uvicorn
 
 from scrapebot.config.settings import load_settings, Settings
 from scrapebot.config.store import ConfigStore
-from scrapebot.events.bus import EventBus, get_event_bus
+from scrapebot.events.bus import EventBus
 from scrapebot.events.subscribers.logger import LoggingSubscriber
 from scrapebot.events.subscribers.metrics import MetricsSubscriber
 from scrapebot.events.subscribers.webhook import WebhookSubscriber
@@ -44,7 +44,7 @@ def create_app(settings: Settings | None = None, config_store: ConfigStore | Non
     if settings is None:
         settings = load_settings()
 
-    bus = get_event_bus()
+    bus = EventBus()
 
     # Wire built-in event subscribers
     LoggingSubscriber(bus)

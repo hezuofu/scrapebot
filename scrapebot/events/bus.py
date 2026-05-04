@@ -101,14 +101,3 @@ class EventBus:
             return None
         finally:
             self.unsubscribe(event_type, handler)
-
-
-# Global singleton
-_event_bus: EventBus | None = None
-
-
-def get_event_bus() -> EventBus:
-    global _event_bus
-    if _event_bus is None:
-        _event_bus = EventBus()
-    return _event_bus

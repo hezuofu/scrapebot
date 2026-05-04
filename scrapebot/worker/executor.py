@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Coroutine
 from datetime import datetime
+from typing import Any
 
 from scrapebot.config.settings import Settings
-from scrapebot.events.bus import EventBus, get_event_bus
+from scrapebot.events.bus import EventBus
 from scrapebot.events.types import Event, EventType
 from scrapebot.pipeline.base import Pipeline
 from scrapebot.pipeline.cleaning.field_cleaner import FieldCleaner
@@ -27,26 +29,29 @@ class Executor:
     def __init__(
         self,
         settings: Settings,
-        event_bus: EventBus | None = None,
+        event_bus: EventBus,
+        pipeline: Pipeline | None = None,
     ) -> None:
         self.settings = settings
-        self._bus = event_bus or get_event_bus()
-        self._downloader_selector = DownloaderSelector(site_rules=settings.site_rules)
+        self._bus = event_bus
+        self._selector = DownloaderSelector(site_rules=settings.site_rules)
         self._parser = CompositeParser()
-        self._pipeline = Pipeline()
-        self._pipeline.add(FieldCleaner()).add(DataValidator())
+        self._pipeline = pipeline or Pipeline().add(FieldCleaner()).add(DataValidator())
 
     async def execute(self, task: Task) -> TaskResult:
-        started_at = datetime.now()
-        events: list[dict] = []
-
-        await self._emit(EventType.TASK_STARTED, task, "Task started")
+        await self._emit(EventType.TASK_STARTED, task)
 
         try:
             if task.scrape_mode == ScrapeMode.AUTOMATE:
-                result = await self._execute_automate(task, events)
+                download_result = await self._run_automate(task)
             else:
-                result = await self._execute_fetch_or_render(task, events)
+                download_result = await self._run_download(task)
+
+            if download_result.error:
+                return self._failure(task, download_result.error, download_result)
+
+            return await self._parse_and_complete(task, download_result)
+
         except Exception as exc:
             logger.error("Task %s failed: %s", task.id, exc)
             await self._emit(EventType.TASK_FAILED, task, str(exc), "error")
@@ -54,141 +59,76 @@ class Executor:
                 task_id=task.id,
                 status=TaskStatus.FAILED,
                 error=str(exc),
-                started_at=started_at,
+                started_at=datetime.now(),
                 finished_at=datetime.now(),
-                events=events,
             )
 
-        result.events = events
-        return result
-
-    async def _execute_fetch_or_render(
-        self,
-        task: Task,
-        events: list[dict],
-    ) -> TaskResult:
-        started_at = datetime.now()
-
-        await self._emit(EventType.DOWNLOAD_STARTED, task, f"Downloading {task.url}")
-        downloader = self._downloader_selector.select(task)
-        download_result = await downloader.download(
+    async def _run_download(self, task: Task) -> DownloadResult:
+        await self._emit(EventType.DOWNLOAD_STARTED, task)
+        downloader = self._selector.select_downloader(task)
+        result = await downloader.download(
             task.url,
             headers=task.headers,
             proxy=task.proxy,
             timeout=task.timeout,
         )
-
-        if download_result.error:
-            await self._emit(EventType.DOWNLOAD_FAILED, task, download_result.error, "error")
-            return TaskResult(
-                task_id=task.id,
-                status=TaskStatus.FAILED,
-                error=download_result.error,
-                started_at=started_at,
-                finished_at=datetime.now(),
-                download_result=download_result,
-                events=events,
-            )
-
-        await self._emit(
-            EventType.DOWNLOAD_COMPLETED,
-            task,
-            f"Downloaded {len(download_result.content)} bytes, status={download_result.status_code}",
-            data={"status_code": download_result.status_code, "bytes": len(download_result.content)},
-        )
-
-        await self._emit(EventType.PARSE_STARTED, task, "Parsing content")
-        parse_result = await self._parser.parse(
-            download_result.text,
-            task.parser_instructions,
-        )
-
-        if parse_result.errors:
-            await self._emit(
-                EventType.PARSE_FAILED,
-                task,
-                f"Parse errors: {parse_result.errors}",
-                "warning",
-                data={"errors": parse_result.errors},
-            )
+        if result.error:
+            await self._emit(EventType.DOWNLOAD_FAILED, task, result.error, "error")
         else:
-            await self._emit(
-                EventType.PARSE_COMPLETED,
-                task,
-                f"Parsed {len(parse_result.items)} items",
-            )
+            await self._emit(EventType.DOWNLOAD_COMPLETED, task,
+                data={"status_code": result.status_code, "bytes": len(result.content)})
+        return result
 
-        await self._emit(EventType.PIPELINE_STARTED, task, "Running pipeline")
-        pipeline_result = await self._pipeline.run(
-            parse_result,
-            context={"task": task},
-        )
-        await self._emit(EventType.PIPELINE_COMPLETED, task, "Pipeline complete")
-
-        await self._emit(EventType.TASK_COMPLETED, task, f"Task completed: {len(parse_result.items)} items")
-        return TaskResult(
-            task_id=task.id,
-            status=TaskStatus.COMPLETED,
-            data=pipeline_result if isinstance(pipeline_result, list) else parse_result.items,
-            started_at=started_at,
-            finished_at=datetime.now(),
-            download_result=download_result,
-            parse_result=parse_result,
-            events=events,
-        )
-
-    async def _execute_automate(
-        self,
-        task: Task,
-        events: list[dict],
-    ) -> TaskResult:
-        started_at = datetime.now()
-        automator = self._downloader_selector.get_automator()
-
-        await self._emit(EventType.AUTOMATE_STEP_STARTED, task, "Starting browser automation")
-
-        download_result = await automator.execute(
+    async def _run_automate(self, task: Task) -> DownloadResult:
+        await self._emit(EventType.AUTOMATE_STEP_STARTED, task)
+        automator = self._selector.select_automator()
+        result = await automator.execute(
             task.url,
             steps=task.automate_steps,
             headers=task.headers,
             proxy=task.proxy,
             timeout=task.timeout,
         )
-
-        if download_result.error:
-            await self._emit(EventType.AUTOMATE_STEP_FAILED, task, download_result.error, "error")
-            return TaskResult(
-                task_id=task.id,
-                status=TaskStatus.FAILED,
-                error=download_result.error,
-                started_at=started_at,
-                finished_at=datetime.now(),
-                download_result=download_result,
-                events=events,
-            )
-
-        await self._emit(EventType.AUTOMATE_STEP_COMPLETED, task, "Automation steps complete")
-
-        if task.parser_type.value != "none" and task.parser_instructions:
-            await self._emit(EventType.PARSE_STARTED, task, "Parsing automation result")
-            parse_result = await self._parser.parse(
-                download_result.text,
-                task.parser_instructions,
-            )
-            await self._emit(EventType.PARSE_COMPLETED, task, f"Parsed {len(parse_result.items)} items")
+        if result.error:
+            await self._emit(EventType.AUTOMATE_STEP_FAILED, task, result.error, "error")
         else:
-            parse_result = ParseResult(items=[])
+            await self._emit(EventType.AUTOMATE_STEP_COMPLETED, task)
+        return result
 
-        await self._emit(EventType.TASK_COMPLETED, task, "Automation task complete")
+    async def _parse_and_complete(self, task: Task, download_result: DownloadResult) -> TaskResult:
+        now = datetime.now()
+
+        await self._emit(EventType.PARSE_STARTED, task)
+        parse_result = await self._parser.parse(download_result.text, task.parser_instructions)
+        if parse_result.errors:
+            await self._emit(EventType.PARSE_FAILED, task, data={"errors": parse_result.errors}, severity="warning")
+        else:
+            await self._emit(EventType.PARSE_COMPLETED, task)
+
+        await self._emit(EventType.PIPELINE_STARTED, task)
+        pipeline_result = await self._pipeline.run(parse_result, context={"task": task})
+        await self._emit(EventType.PIPELINE_COMPLETED, task)
+
+        data = pipeline_result if isinstance(pipeline_result, list) else parse_result.items
+        await self._emit(EventType.TASK_COMPLETED, task)
         return TaskResult(
             task_id=task.id,
             status=TaskStatus.COMPLETED,
-            data=parse_result.items if parse_result.items else [],
-            started_at=started_at,
+            data=data,
+            started_at=now,
             finished_at=datetime.now(),
             download_result=download_result,
             parse_result=parse_result,
-            events=events,
+        )
+
+    def _failure(self, task: Task, error: str, download_result: DownloadResult | None = None) -> TaskResult:
+        return TaskResult(
+            task_id=task.id,
+            status=TaskStatus.FAILED,
+            error=error,
+            started_at=datetime.now(),
+            finished_at=datetime.now(),
+            download_result=download_result,
         )
 
     async def _emit(
@@ -197,16 +137,15 @@ class Executor:
         task: Task,
         message: str = "",
         severity: str = "info",
-        data: dict | None = None,
+        data: dict[str, Any] | None = None,
     ) -> None:
-        event = Event(
+        await self._bus.publish(Event(
             type=event_type,
             task_id=task.id,
             message=message,
             severity=severity,
             data=data or {},
-        )
-        await self._bus.publish(event)
+        ))
 
     async def close(self) -> None:
-        await self._downloader_selector.close()
+        await self._selector.close()

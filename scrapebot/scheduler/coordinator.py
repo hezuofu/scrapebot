@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from scrapebot.config.settings import Settings
-from scrapebot.events.bus import EventBus, get_event_bus
+from scrapebot.events.bus import EventBus
 from scrapebot.events.types import Event, EventType
 from scrapebot.scheduler.dispatcher import Dispatcher
 from scrapebot.scheduler.load_balancer import LoadBalancer
@@ -30,7 +30,9 @@ class Coordinator:
         self.queue = queue or PriorityQueue()
         self.dispatcher = dispatcher or Dispatcher(settings)
         self.load_balancer = load_balancer or LoadBalancer(settings)
-        self._bus = event_bus or get_event_bus()
+        if event_bus is None:
+            raise ValueError("Coordinator requires an EventBus instance")
+        self._bus = event_bus
         self._task_store = task_store or TaskStore()
         self._running = False
         self._results: dict[str, TaskResult] = {}

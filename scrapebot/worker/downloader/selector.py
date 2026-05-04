@@ -10,6 +10,12 @@ from scrapebot.worker.downloader.playwright_downloader import PlaywrightDownload
 
 
 class DownloaderSelector:
+    """Routes tasks to the correct downloader or automator based on mode and site rules.
+
+    Two distinct return types by design — downloaders and automators have
+    different interfaces, so the caller must know which it needs.
+    """
+
     def __init__(
         self,
         http_downloader: BaseDownloader | None = None,
@@ -22,29 +28,36 @@ class DownloaderSelector:
         self._automator = browser_automator or BrowserAutomator()
         self._site_rules = site_rules or {}
 
-    def select(self, task: Task) -> BaseDownloader:
-        """Select downloader based on scrape mode and site rules."""
-        rules = self._site_rules.get("sites", [])
-        for rule in rules:
-            pattern = rule.get("pattern", "")
-            if fnmatch(task.url, pattern):
-                if "scrape_mode" in rule:
-                    return self._select_by_mode(ScrapeMode(rule["scrape_mode"]))
-                dl_type = rule.get("downloader", "http")
-                return self._playwright if dl_type == "playwright" else self._http
-
-        return self._select_by_mode(task.scrape_mode)
-
-    def _select_by_mode(self, mode: ScrapeMode) -> BaseDownloader:
-        if mode == ScrapeMode.AUTOMATE:
-            return self._automator
-        elif mode == ScrapeMode.RENDER:
+    def select_downloader(self, task: Task) -> BaseDownloader:
+        """Return the appropriate downloader for fetch/render modes."""
+        override = self._site_override(task.url)
+        if override == "playwright":
             return self._playwright
-        else:
+        if override == "http":
             return self._http
 
-    def get_automator(self) -> BrowserAutomator:
+        if task.scrape_mode == ScrapeMode.RENDER or task.downloader_type == DownloaderType.PLAYWRIGHT:
+            return self._playwright
+        return self._http
+
+    def select_automator(self) -> BrowserAutomator:
+        """Return the browser automator instance."""
         return self._automator
+
+    def _site_override(self, url: str) -> str | None:
+        for rule in self._site_rules.get("sites", []):
+            pattern = rule.get("pattern", "")
+            if fnmatch(url, pattern):
+                dl = rule.get("downloader")
+                if dl:
+                    return dl
+                mode = rule.get("scrape_mode", "")
+                if mode == "render":
+                    return "playwright"
+                if mode == "fetch":
+                    return "http"
+                return mode or None
+        return None
 
     async def close(self) -> None:
         await self._http.close()

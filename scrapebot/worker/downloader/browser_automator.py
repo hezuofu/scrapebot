@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from scrapebot.events.bus import EventBus, get_event_bus
+from scrapebot.events.bus import EventBus
 from scrapebot.events.types import Event, EventType
 from scrapebot.types import DownloadResult
 
@@ -36,7 +36,7 @@ class BrowserAutomator:
         self._viewport = viewport or {"width": 1920, "height": 1080}
         self._browser = None
         self._playwright = None
-        self._bus = event_bus or get_event_bus()
+        self._bus = event_bus
 
     async def _ensure_browser(self) -> None:
         if self._playwright is None:

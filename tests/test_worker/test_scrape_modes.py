@@ -12,26 +12,21 @@ from scrapebot.worker.downloader.browser_automator import BrowserAutomator
 def test_fetch_mode_selects_http_downloader():
     selector = DownloaderSelector()
     task = Task(url="http://example.com", scrape_mode=ScrapeMode.FETCH)
-    downloader = selector.select(task)
+    downloader = selector.select_downloader(task)
     assert isinstance(downloader, HTTPDownloader)
 
 
 def test_render_mode_selects_playwright():
     selector = DownloaderSelector()
     task = Task(url="http://example.com", scrape_mode=ScrapeMode.RENDER)
-    downloader = selector.select(task)
+    downloader = selector.select_downloader(task)
     assert isinstance(downloader, PlaywrightDownloader)
 
 
-def test_automate_mode_selects_browser_automator():
+def test_automate_mode_uses_automator():
     selector = DownloaderSelector()
-    task = Task(
-        url="http://example.com",
-        scrape_mode=ScrapeMode.AUTOMATE,
-        automate_steps=[{"action": "click", "selector": "#btn"}],
-    )
-    downloader = selector.select(task)
-    assert isinstance(downloader, BrowserAutomator)
+    automator = selector.select_automator()
+    assert isinstance(automator, BrowserAutomator)
 
 
 def test_site_rules_override_mode():
@@ -42,7 +37,7 @@ def test_site_rules_override_mode():
     }
     selector = DownloaderSelector(site_rules=rules)
     task = Task(url="http://app.spa.io/page", scrape_mode=ScrapeMode.FETCH)
-    downloader = selector.select(task)
+    downloader = selector.select_downloader(task)
     assert isinstance(downloader, PlaywrightDownloader)
 
 
