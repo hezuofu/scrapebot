@@ -30,30 +30,26 @@ class DownloaderSelector:
 
     def select_downloader(self, task: Task) -> BaseDownloader:
         override = self._site_override(task.url)
-
         if override == "playwright":
             return self._playwright
         if override == "http":
             return self._http
-
-        # Remembered fallback: this domain previously needed JS
         domain = self._domain_for(task.url)
         if self._enable_fallback and domain in self._fallback_domains:
             logger.info("Fallback to Playwright for %s (remembered)", domain)
             return self._playwright
-
+        if task.scrape_mode == ScrapeMode.AUTOMATE:
+            return self._automator
         if task.scrape_mode == ScrapeMode.RENDER or task.downloader_type == DownloaderType.PLAYWRIGHT:
             return self._playwright
         return self._http
 
     async def report_result(self, task: Task, result) -> None:
-        """After task completes, analyze result to refine future selections."""
         if not self._enable_fallback:
             return
         dl = getattr(result, "download_result", None) or result
         if dl is None:
             return
-        # Fallback trigger: page is empty or looks like it needs JS
         text = getattr(dl, "text", "") or ""
         if self._needs_js(text, dl):
             domain = self._domain_for(task.url)
@@ -65,12 +61,8 @@ class DownloaderSelector:
         if not text or len(text.strip()) < 200:
             return True
         indicators = [
-            "You need to enable JavaScript",
-            "Please enable JavaScript",
-            "noscript",
-            "<body></body>",
-            '<div id="app"></div>',
-            '<div id="root"></div>',
+            "You need to enable JavaScript", "Please enable JavaScript",
+            "noscript", "<body></body>", '<div id="app"></div>', '<div id="root"></div>',
         ]
         lower = text[:500].lower()
         return any(ind.lower() in lower for ind in indicators)

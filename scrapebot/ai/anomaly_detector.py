@@ -56,23 +56,11 @@ class AnomalyDetector:
             return None
 
         try:
-            response = await self._llm._client.chat.completions.create(
-                model=self._llm.model,
-                max_tokens=200,
-                temperature=0.0,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            "Compare the structure of these two HTML pages. "
-                            "Has the page structure changed significantly? Answer 'yes' or 'no' briefly.\n\n"
-                            f"Baseline (first 1000 chars):\n{baseline[:1000]}\n\n"
-                            f"Current (first 1000 chars):\n{current[:1000]}"
-                        ),
-                    },
-                ],
+            result = await self._llm.extract(
+                f"Compare these HTML structures. Has the page changed significantly?",
+                f"Baseline:\n{baseline[:1000]}\n\nCurrent:\n{current[:1000]}",
             )
-            answer = (response.choices[0].message.content or "").lower()
+            answer = str(result[0].get("result", "") if result else "").lower()
             if answer.startswith("yes"):
                 return "Page structure has changed significantly from baseline"
             return None

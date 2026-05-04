@@ -10,20 +10,13 @@ class ContentSummarizer:
     async def summarize(self, content: str, max_length: int = 200) -> str:
         if self._llm is None:
             return content[:max_length]
-
         try:
-            response = await self._llm._client.chat.completions.create(
-                model=self._llm.model,
-                max_tokens=max_length,
-                temperature=0.0,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"Summarize this content in under {max_length} characters:\n\n{content[:3000]}",
-                    },
-                ],
+            result = await self._llm.extract(
+                f"Summarize in under {max_length} characters",
+                content[:3000],
             )
-            return (response.choices[0].message.content or "")[:max_length]
+            text = str(result[0].get("summary", result[0]) if result else "")
+            return text[:max_length] if text else content[:max_length]
         except Exception:
             return content[:max_length]
 

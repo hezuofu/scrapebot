@@ -1,0 +1,80 @@
+{
+  "task_id": "ali213_detail",
+  "task_name": "游侠论坛黑神话悟空版块 - 详情采集",
+  "task_desc": "采集帖子详情页的全部结构化字段信息",
+  "start_urls": [],
+  "rules": [
+    {
+      "url": "https://game.ali213.net/thread-*-1-1.html",
+      "method": "GET",
+      "selectors": [
+        {
+          "name": "title",
+          "description": "帖子标题",
+          "type": "xpath",
+          "selector": "//span[@id='thread_subject']//text()",
+          "multiple": false,
+          "required": true
+        },
+        {
+          "name": "author",
+          "description": "楼主用户名",
+          "type": "xpath",
+          "selector": "//div[@class='authi']//a[@class='xw1']/text()",
+          "multiple": false,
+          "required": true
+        },
+        {
+          "name": "post_time",
+          "description": "发布时间",
+          "type": "xpath",
+          "selector": "//div[@class='authi']//em[contains(text(),'发表于')]/text()",
+          "multiple": false,
+          "required": false
+        },
+        {
+          "name": "content",
+          "description": "帖子正文内容",
+          "type": "xpath",
+          "selector": "//td[@class='t_f']//text()",
+          "multiple": false,
+          "required": true
+        },
+        {
+          "name": "images",
+          "description": "帖子内图片链接",
+          "type": "css",
+          "selector": "td.t_f img",
+          "multiple": true,
+          "required": false,
+          "attribute": "src"
+        },
+        {
+          "name": "attachments",
+          "description": "附件下载链接",
+          "type": "css",
+          "selector": "td.t_f a[href*='attachment']",
+          "multiple": true,
+          "required": false,
+          "attribute": "href"
+        }
+      ],
+      "pagination_type": "next_link",
+      "pagination_enabled": true,
+      "pagination_max_pages": 50,
+      "pagination_delay": 2,
+      "pagination_next_selector": "a.nxt"
+    }
+  ],
+  "concurrency": 1,
+  "download_delay": 2,
+  "max_retries": 3,
+  "timeout": 30,
+  "storage": {
+    "type": "file",
+    "file": {
+      "output_dir": "output/ali213",
+      "format": "json"
+    }
+  }
+}

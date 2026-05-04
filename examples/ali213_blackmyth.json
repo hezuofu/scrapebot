@@ -1,0 +1,136 @@
+{
+  "task_id": "ali213_blackmyth",
+  "task_name": "游侠论坛 - 黑神话悟空版块全量采集",
+  "task_desc": "论坛列表→帖子详情，多规则串联采集",
+  "start_urls": [
+    "https://game.ali213.net/forum-2615-1.html",
+    "https://game.ali213.net/forum-2615-2.html",
+    "https://game.ali213.net/forum-2615-3.html",
+    "https://game.ali213.net/forum-2615-4.html",
+    "https://game.ali213.net/forum-2615-5.html",
+    "https://game.ali213.net/forum-2615-6.html",
+    "https://game.ali213.net/forum-2615-7.html",
+    "https://game.ali213.net/forum-2615-8.html",
+    "https://game.ali213.net/forum-2615-9.html",
+    "https://game.ali213.net/forum-2615-10.html",
+    "https://game.ali213.net/forum-2615-11.html",
+    "https://game.ali213.net/forum-2615-12.html",
+    "https://game.ali213.net/forum-2615-13.html"
+  ],
+  "rules": [
+    {
+      "url": "game\\.ali213\\.net/forum-2615-\\d+\\.html",
+      "method": "GET",
+      "selectors": [
+        {
+          "name": "url",
+          "description": "帖子详情页链接",
+          "type": "css",
+          "selector": "th.common a.xst",
+          "multiple": true,
+          "required": true,
+          "attribute": "href"
+        }
+      ],
+      "follow": "url"
+    },
+    {
+      "url": "game\\.ali213\\.net/thread-\\d+-1-1\\.html",
+      "method": "GET",
+      "selectors": [
+        {
+          "name": "title",
+          "description": "帖子标题",
+          "type": "xpath",
+          "selector": "//span[@id='thread_subject']//text()",
+          "required": true
+        },
+        {
+          "name": "author",
+          "description": "楼主用户名",
+          "type": "xpath",
+          "selector": "//div[@class='authi']//a[@class='xw1']/text()",
+          "required": true
+        },
+        {
+          "name": "post_time",
+          "description": "发布时间",
+          "type": "xpath",
+          "selector": "//div[@class='authi']//em[contains(text(),'发表于')]/text()"
+        },
+        {
+          "name": "content",
+          "description": "帖子正文",
+          "type": "xpath",
+          "selector": "//td[@class='t_f']//text()",
+          "required": true
+        },
+        {
+          "name": "images",
+          "description": "帖子内图片",
+          "type": "css",
+          "selector": "td.t_f img",
+          "multiple": true,
+          "attribute": "src"
+        },
+        {
+          "name": "attachments",
+          "description": "附件下载链接",
+          "type": "css",
+          "selector": "td.t_f a[href*='attachment']",
+          "multiple": true,
+          "attribute": "href"
+        }
+      ],
+      "pagination_type": "next_link",
+      "pagination_enabled": true,
+      "pagination_max_pages": 50,
+      "pagination_delay": 2,
+      "pagination_next_selector": "a.nxt"
+    },
+    {
+      "url": "game\\.ali213\\.net/thread-\\d+-\\d+-\\d+\\.html",
+      "method": "GET",
+      "selectors": [
+        {
+          "name": "title",
+          "description": "帖子标题",
+          "type": "xpath",
+          "selector": "//span[@id='thread_subject']//text()",
+          "required": true
+        },
+        {
+          "name": "content",
+          "description": "帖子正文",
+          "type": "xpath",
+          "selector": "//td[@class='t_f']//text()",
+          "required": true
+        },
+        {
+          "name": "images",
+          "description": "帖子内图片",
+          "type": "css",
+          "selector": "td.t_f img",
+          "multiple": true,
+          "attribute": "src"
+        }
+      ],
+      "pagination_type": "next_link",
+      "pagination_enabled": true,
+      "pagination_max_pages": 50,
+      "pagination_delay": 2,
+      "pagination_next_selector": "a.nxt"
+    }
+  ],
+  "concurrency": 1,
+  "download_delay": 2,
+  "max_retries": 3,
+  "timeout": 30,
+  "storage": {
+    "type": "file",
+    "file": {
+      "output_dir": "examples/data/ali213",
+      "format": "json"
+    }
+  }
+}

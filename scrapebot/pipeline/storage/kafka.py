@@ -1,3 +1,5 @@
+"""Kafka streaming adapter — requires aiokafka."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -12,22 +14,17 @@ class KafkaStorage(BaseStorage):
         self._producer = None
 
     async def connect(self) -> None:
-        pass
+        raise NotImplementedError("KafkaStorage requires aiokafka — install with: pip install aiokafka")
 
     async def disconnect(self) -> None:
         pass
 
     async def save(self, data: list[dict[str, Any]], collection: str = "default") -> int:
-        return 0
+        raise NotImplementedError("KafkaStorage requires aiokafka — install with: pip install aiokafka")
 
-    async def query(
-        self,
-        collection: str = "default",
-        filters: dict[str, Any] | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[dict[str, Any]]:
-        return []
+    async def query(self, collection: str = "default", filters: dict[str, Any] | None = None,
+                    limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+        raise NotImplementedError("KafkaStorage requires aiokafka — install with: pip install aiokafka")
 
     async def delete(self, collection: str, filters: dict[str, Any]) -> int:
-        return 0
+        raise NotImplementedError("KafkaStorage requires aiokafka — install with: pip install aiokafka")

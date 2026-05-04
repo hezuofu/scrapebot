@@ -65,6 +65,7 @@ class HTTPDownloader(BaseDownloader):
         headers: dict[str, str] | None = None,
         proxy: str | None = None,
         timeout: float = 30.0,
+        steps: list[dict[str, Any]] | None = None,
     ) -> DownloadResult:
         client = await self._get_client(url, proxy)
         start = time.monotonic()

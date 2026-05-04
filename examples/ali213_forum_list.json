@@ -1,0 +1,41 @@
+{
+  "task_id": "ali213_list",
+  "task_name": "游侠论坛黑神话悟空版块 - 列表采集",
+  "task_desc": "采集列表页所有帖子详情URL，作为详情采集的入口",
+  "start_urls": [
+    "https://game.ali213.net/forum-2615-1.html",
+    "https://game.ali213.net/forum-2615-2.html",
+    "https://game.ali213.net/forum-2615-3.html",
+    "https://game.ali213.net/forum-2615-4.html",
+    "https://game.ali213.net/forum-2615-5.html",
+    "https://game.ali213.net/forum-2615-6.html",
+    "https://game.ali213.net/forum-2615-7.html",
+    "https://game.ali213.net/forum-2615-8.html",
+    "https://game.ali213.net/forum-2615-9.html",
+    "https://game.ali213.net/forum-2615-10.html",
+    "https://game.ali213.net/forum-2615-11.html",
+    "https://game.ali213.net/forum-2615-12.html",
+    "https://game.ali213.net/forum-2615-13.html"
+  ],
+  "rules": [
+    {
+      "url": "https://game.ali213.net/forum-2615-*.html",
+      "method": "GET",
+      "selectors": [
+        {
+          "name": "url",
+          "description": "帖子详情页链接",
+          "type": "css",
+          "selector": "th.common a.xst",
+          "multiple": true,
+          "required": true,
+          "attribute": "href"
+        }
+      ]
+    }
+  ],
+  "concurrency": 1,
+  "download_delay": 2,
+  "max_retries": 3,
+  "timeout": 30
+}

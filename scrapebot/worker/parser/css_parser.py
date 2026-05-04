@@ -23,8 +23,15 @@ class CSSParser(BaseParser):
             for row in rows:
                 item: dict[str, Any] = {}
                 for field, css in selectors.items():
-                    el = row.select_one(css) if css.startswith("& ") else soup.select_one(css)
-                    item[field] = el.get_text(strip=True) if el else None
+                    if css.startswith("& "):
+                        el = row.select_one(css[2:])
+                    else:
+                        el = soup.select_one(css)
+                    if el:
+                        attr = instructions.get("attributes", {}).get(field)
+                        item[field] = el.get(attr) if attr else el.get_text(strip=True)
+                    else:
+                        item[field] = None
                 items.append(item)
         else:
             item: dict[str, Any] = {}

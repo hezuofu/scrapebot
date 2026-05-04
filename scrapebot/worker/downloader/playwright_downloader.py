@@ -80,6 +80,7 @@ class PlaywrightDownloader(BaseDownloader):
         headers: dict[str, str] | None = None,
         proxy: str | None = None,
         timeout: float = 30.0,
+        steps: list[dict[str, Any]] | None = None,
     ) -> DownloadResult:
         # For per-request proxy/headers, create a fresh context
         needs_fresh = bool(proxy) or bool(headers)

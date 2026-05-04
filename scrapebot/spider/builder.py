@@ -55,6 +55,7 @@ def build_job_from_config(data: dict[str, Any]) -> ScrapeJob:
             scrape_mode=rule_data.get("scrape_mode", "fetch"),
             headers=rule_data.get("headers", {}),
             before_script=rule_data.get("before_script"),
+            follow=rule_data.get("follow"),
         ))
 
     storage = None

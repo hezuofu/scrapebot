@@ -173,6 +173,7 @@ class ScrapeRule(BaseModel):
     scrape_mode: ScrapeMode = ScrapeMode.FETCH
     headers: dict[str, str] = Field(default_factory=dict)
     before_script: str | None = None                   # JS to run before extraction
+    follow: str | None = None                          # field name whose values are URLs to crawl next
 
 
 class StorageRef(BaseModel):
@@ -202,16 +203,20 @@ class ScrapeJob(BaseModel):
     # ── convenience ────────────────────────────────────────
 
     def selectors_for_url(self, url: str) -> list[FieldSelector]:
-        """Return the selectors from the first rule matching this URL."""
-        from fnmatch import fnmatch as _fnmatch
-        for rule in self.rules:
-            if _fnmatch(url, rule.url):
-                return rule.selectors
-        return []
+        rule = self.rule_for_url(url)
+        return rule.selectors if rule else []
 
     def rule_for_url(self, url: str) -> ScrapeRule | None:
+        import re as _re
         from fnmatch import fnmatch as _fnmatch
         for rule in self.rules:
+            # Detect regex: contains \d \w + * [ ( ) { } ^ $
+            if any(c in rule.url for c in "\\+*[](){}^$"):
+                try:
+                    if _re.search(rule.url, url):
+                        return rule
+                except _re.error:
+                    pass
             if _fnmatch(url, rule.url):
                 return rule
         return None

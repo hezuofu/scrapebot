@@ -6,9 +6,10 @@ from typing import Any
 
 from scrapebot.events.bus import EventBus
 from scrapebot.types import DownloadResult
+from scrapebot.worker.downloader.base import BaseDownloader
 
 
-class BrowserAutomator:
+class BrowserAutomator(BaseDownloader):
     SUPPORTED_ACTIONS = {
         "navigate", "click", "type", "scroll", "wait",
         "wait_for_selector", "wait_for_navigation",
@@ -29,6 +30,7 @@ class BrowserAutomator:
         self._browser = None
         self._playwright = None
         self._bus = event_bus
+        self._steps: list[dict[str, Any]] = []
 
     async def _ensure_browser(self) -> None:
         if self._playwright is None:
@@ -43,14 +45,14 @@ class BrowserAutomator:
                 self._playwright = None
                 raise
 
-    async def execute(
+    async def download(
         self,
         url: str,
-        steps: list[dict[str, Any]],
         *,
         headers: dict[str, str] | None = None,
         proxy: str | None = None,
         timeout: float = 60.0,
+        steps: list[dict[str, Any]] | None = None,
     ) -> DownloadResult:
         await self._ensure_browser()
 
@@ -63,11 +65,12 @@ class BrowserAutomator:
         context = await self._browser.new_context(**context_opts)
         page = await context.new_page()
         start_time = time.monotonic()
+        _steps = steps or []
 
         try:
             await page.goto(url, timeout=timeout * 1000, wait_until="domcontentloaded")
 
-            for step in steps:
+            for step in _steps:
                 await self._execute_step(page, step, timeout)
 
             elapsed = (time.monotonic() - start_time) * 1000
@@ -128,11 +131,9 @@ class BrowserAutomator:
         elif action == "evaluate":
             step["_result"] = await page.evaluate(str(value))
         elif action == "extract":
-            instructions = step.get("instructions", {})
-            step["_result"] = await self.extract(page, instructions)
+            step["_result"] = await self._extract(page, step.get("instructions", {}))
         elif action == "extract_all":
-            instructions = step.get("instructions", {})
-            step["_result"] = await self.extract(page, instructions)
+            step["_result"] = await self._extract(page, step.get("instructions", {}))
         elif action == "fill_form":
             fields = step.get("fields", {})
             for field_selector, field_value in fields.items():
@@ -141,7 +142,7 @@ class BrowserAutomator:
             if submit_selector:
                 await page.click(submit_selector)
 
-    async def extract(self, page: Any, instructions: dict[str, Any]) -> list[dict[str, Any]]:
+    async def _extract(self, page: Any, instructions: dict[str, Any]) -> list[dict[str, Any]]:
         selectors = instructions.get("selectors", {})
         extract_list = instructions.get("extract_list", False)
         list_selector = instructions.get("list_selector", "body")

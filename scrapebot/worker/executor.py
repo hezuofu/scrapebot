@@ -62,14 +62,9 @@ class Executor:
         await self._emit(EventType.TASK_STARTED, task)
 
         try:
-            if task.scrape_mode == ScrapeMode.AUTOMATE:
-                download_result = await self._run_automate(task)
-            else:
-                download_result = await self._run_download(task)
-
+            download_result = await self._run_download(task)
             if download_result.error:
                 return self._failure(task, download_result.error, download_result)
-
             return await self._parse_and_complete(task, download_result)
 
         except asyncio.CancelledError:
@@ -78,12 +73,8 @@ class Executor:
             logger.error("Task %s failed: %s", task.id, exc)
             await self._emit(EventType.TASK_FAILED, task, str(exc), "error")
             return TaskResult(
-                task_id=task.id,
-                status=TaskStatus.FAILED,
-                error=str(exc),
-                started_at=datetime.now(),
-                finished_at=datetime.now(),
-            )
+                task_id=task.id, status=TaskStatus.FAILED, error=str(exc),
+                started_at=datetime.now(), finished_at=datetime.now())
 
     async def _run_download(self, task: Task) -> DownloadResult:
         await self._emit(EventType.DOWNLOAD_STARTED, task)
@@ -93,28 +84,13 @@ class Executor:
             headers=task.headers,
             proxy=task.proxy,
             timeout=task.timeout,
+            steps=task.automate_steps or None,
         )
         if result.error:
             await self._emit(EventType.DOWNLOAD_FAILED, task, result.error, "error")
         else:
             await self._emit(EventType.DOWNLOAD_COMPLETED, task,
                 data={"status_code": result.status_code, "bytes": len(result.content)})
-        return result
-
-    async def _run_automate(self, task: Task) -> DownloadResult:
-        await self._emit(EventType.AUTOMATE_STEP_STARTED, task)
-        automator = self._selector.select_automator()
-        result = await automator.execute(
-            task.url,
-            steps=task.automate_steps,
-            headers=task.headers,
-            proxy=task.proxy,
-            timeout=task.timeout,
-        )
-        if result.error:
-            await self._emit(EventType.AUTOMATE_STEP_FAILED, task, result.error, "error")
-        else:
-            await self._emit(EventType.AUTOMATE_STEP_COMPLETED, task)
         return result
 
     async def _parse_and_complete(self, task: Task, download_result: DownloadResult) -> TaskResult:

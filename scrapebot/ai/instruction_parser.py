@@ -16,24 +16,19 @@ class InstructionParser:
             logger.warning("No LLM client configured for instruction parsing")
             return {"error": "No LLM client configured"}
 
-        prompt = (
-            "Convert the following natural language scraping instruction into a structured configuration. "
-            "Output JSON with these fields: selectors (dict of field->css_selector), "
-            "extract_list (bool), list_selector (string|null), parser_type (css|xpath|regex|llm), "
-            "attributes (dict of field->html_attribute|null).\n\n"
-            f"Instruction: {instruction}"
-        )
+        # Check cache first
+        cached = self._llm.get_cached_instruction(instruction)
+        if cached:
+            return cached
 
         try:
-            response = await self._llm._client.chat.completions.create(
-                model=self._llm.model,
-                max_tokens=1024,
-                temperature=0.0,
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"},
+            result = await self._llm.extract(
+                f"Convert this scraping instruction into structured config: {instruction}",
+                instruction,
             )
-            text = response.choices[0].message.content or "{}"
-            return json.loads(text)
+            parsed = result[0] if result else {}
+            self._llm.cache_instruction(instruction, parsed)
+            return parsed
         except Exception as exc:
             logger.error("Failed to parse instruction: %s", exc)
             return {"error": str(exc)}
